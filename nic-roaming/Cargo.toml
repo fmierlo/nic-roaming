@@ -8,4 +8,4 @@ path = "src/main.rs"
 name = "nicr"
 
 [dependencies]
-nic-roaming-platform = { path = "../nic-roaming-platform" }
+platform = { path = "../platform" }

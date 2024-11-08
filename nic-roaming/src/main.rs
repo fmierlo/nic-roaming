@@ -1,5 +1,5 @@
 
-use nic_roaming_platform::interface;
+use platform::interface;
 
 fn main() {
     interface::list();
