@@ -1,6 +1,11 @@
-
-use platform::interface;
+use platform::nic;
 
 fn main() {
-    interface::list();
+    let name = "en0";
+
+    let nic = nic::new();
+
+    let mac_address = nic.get_mac_address(name);
+
+    println!("nic={:?} mac_address={}", name, mac_address);
 }
