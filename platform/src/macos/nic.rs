@@ -1,20 +1,11 @@
-use std::rc::Rc;
-
-use super::{ifr, socket::DynSocket};
+use super::{ifr, socket::Socket};
 
 #[derive(Default)]
 pub struct Nic {
-    socket: Rc<DynSocket>,
+    socket: Box<dyn Socket>,
 }
 
 impl Nic {
-    #[cfg(test)]
-    fn new(socket: Rc<DynSocket>) -> Rc<Nic> {
-        Rc::new(Self {
-            socket: Rc::clone(&socket),
-        })
-    }
-
     pub fn get_mac_address(&self, name: &str) -> String {
         let mut ifr = ifr::new();
         ifr::set_name(&mut ifr, name);
@@ -58,7 +49,9 @@ mod tests {
         let expected_mac_address = "00:11:22:33:44:55";
 
         let socket = MockSocket::default().with_nic(name, expected_mac_address);
-        let nic = Nic::new(socket.as_sys());
+        let nic = Nic {
+            socket: socket.as_socket(),
+        };
         // When
         let mac_address = nic.get_mac_address(&name);
         // Then
@@ -72,7 +65,9 @@ mod tests {
         let mac_address = "00:11:22:33:44:55";
 
         let socket = MockSocket::default();
-        let nic = Nic::new(socket.as_sys());
+        let nic = Nic {
+            socket: socket.as_socket(),
+        };
         // When
         let _ = nic.set_mac_address(&name, &mac_address);
         // Then

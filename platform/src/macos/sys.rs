@@ -16,6 +16,9 @@
 // 'i' as u8 = 105
 // mem::size_of::<ifreq>() = 32
 
+use core::fmt;
+use std::fmt::Debug;
+
 use libc::{c_int, c_ulong, c_void};
 
 // #define SIOCSIFLLADDR   _IOW('i', 60, struct ifreq)     /* set link level addr */
@@ -27,12 +30,18 @@ pub(crate) const SIOCSIFLLADDR: c_ulong = 0x8020693c;
 pub(crate) const SIOCGIFLLADDR: c_ulong = 0xc020699e;
 
 pub(crate) trait Sys {
+    fn as_sys(&self) -> Box<dyn Sys>;
+    fn fmt_as_sys(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int;
     fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int;
     fn close(&self, fd: c_int) -> c_int;
 }
 
-pub(crate) type DynSys = Box<dyn Sys>;
+impl fmt::Debug for Box<dyn Sys> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_as_sys(f)
+    }
+}
 
 impl Default for Box<dyn Sys> {
     fn default() -> Box<dyn Sys> {
@@ -40,10 +49,24 @@ impl Default for Box<dyn Sys> {
     }
 }
 
-#[derive(Debug, Default)]
+impl Clone for Box<dyn Sys> {
+    fn clone(&self) -> Self {
+        self.as_sys()
+    }
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct LibcSys {}
 
 impl Sys for LibcSys {
+    fn as_sys(&self) -> Box<dyn Sys> {
+        Box::new(self.clone())
+    }
+
+    fn fmt_as_sys(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt(f)
+    }
+
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
         unsafe { libc::socket(domain, ty, protocol) }
     }
@@ -60,26 +83,20 @@ impl Sys for LibcSys {
 #[cfg(test)]
 pub(crate) mod mock {
     use libc::{c_int, c_ulong, c_void};
-    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
     use crate::macos::ifr;
 
-    use super::{DynSys, Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
+    use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
     type KeyValue = RefCell<HashMap<String, String>>;
 
-    #[derive(Debug, Default)]
+    #[derive(Clone, Debug, Default)]
     pub(crate) struct MockSys {
         kv: Rc<KeyValue>,
     }
 
     impl MockSys {
-        pub(crate) fn as_sys(&self) -> Rc<DynSys> {
-            Rc::new(Box::new(Self {
-                kv: Rc::clone(&self.kv),
-            }))
-        }
-
         pub(crate) fn with_nic(self, name: &str, mac_address: &str) -> Self {
             self.kv
                 .borrow_mut()
@@ -96,6 +113,14 @@ pub(crate) mod mock {
     }
 
     impl Sys for MockSys {
+        fn as_sys(&self) -> Box<dyn Sys> {
+            Box::new(self.clone())
+        }
+
+        fn fmt_as_sys(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.fmt(f)
+        }
+
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
             eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol})");
             0
@@ -113,7 +138,7 @@ pub(crate) mod mock {
                             ifr::set_mac_address(ifr, &mac_address);
                             0
                         }
-                        _ => -1
+                        _ => -1,
                     }
                 }
                 SIOCSIFLLADDR => {
@@ -125,7 +150,7 @@ pub(crate) mod mock {
                         .insert(name.to_string(), mac_address.to_string());
                     0
                 }
-                _ => -1
+                _ => -1,
             }
         }
 

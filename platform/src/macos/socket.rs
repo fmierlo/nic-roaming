@@ -1,14 +1,12 @@
-use std::io::Error as IOError;
+use std::io::Error;
 use std::io::{self, ErrorKind};
-use std::rc::Rc;
 
-use super::sys::{self, DynSys};
+use super::sys;
+use super::sys::Sys;
 
 pub(crate) trait Socket {
     fn open_local_dgram(&self) -> io::Result<DynOpenSocket>;
 }
-
-pub(crate) type DynSocket = Box<dyn Socket>;
 
 impl Default for Box<dyn Socket> {
     fn default() -> Box<dyn Socket> {
@@ -16,35 +14,26 @@ impl Default for Box<dyn Socket> {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct LibcSocket {
-    sys: Rc<DynSys>,
-}
-
-impl LibcSocket {
-    #[cfg(test)]
-    fn new(sys: Rc<DynSys>) -> Rc<LibcSocket> {
-        Rc::new(Self {
-            sys: Rc::clone(&sys),
-        })
-    }
+    sys: Box<dyn Sys>,
 }
 
 impl Socket for LibcSocket {
     fn open_local_dgram(&self) -> io::Result<DynOpenSocket> {
         match self.sys.socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
-            -1 => Err(IOError::last_os_error()),
+            -1 => Err(Error::last_os_error()),
             fd => Ok(Box::new(LibcOpenSocket {
                 fd,
-                sys: Rc::clone(&self.sys),
+                sys: self.sys.clone(),
             })),
         }
     }
 }
 
 pub(crate) trait OpenSocket {
-    fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<(), IOError>;
-    fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<(), IOError>;
+    fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error>;
+    fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error>;
 }
 
 pub(crate) type DynOpenSocket = Box<dyn OpenSocket>;
@@ -55,29 +44,29 @@ impl Default for Box<dyn OpenSocket> {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct LibcOpenSocket {
     fd: libc::c_int,
-    sys: Rc<DynSys>,
+    sys: Box<dyn Sys>,
 }
 
 impl OpenSocket for LibcOpenSocket {
-    fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<(), IOError> {
+    fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error> {
         match self.sys.ioctl(self.fd, sys::SIOCGIFLLADDR, arg) {
             0 => Ok(()),
-            -1 => Err(IOError::last_os_error()),
-            err => Err(IOError::new(
+            -1 => Err(Error::last_os_error()),
+            err => Err(Error::new(
                 ErrorKind::Other,
                 format!("LibcOpenSocket.get_lladdr(SIOCGIFLLADDR) -> {err}"),
             )),
         }
     }
 
-    fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<(), IOError> {
+    fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error> {
         match self.sys.ioctl(self.fd, sys::SIOCSIFLLADDR, arg) {
             0 => Ok(()),
-            -1 => Err(IOError::last_os_error()),
-            err => Err(IOError::new(
+            -1 => Err(Error::last_os_error()),
+            err => Err(Error::new(
                 ErrorKind::Other,
                 format!("LibcOpenSocket.set_lladdr(SIOCSIFLLADDR) -> {err}"),
             )),
@@ -91,7 +80,7 @@ impl Drop for LibcOpenSocket {
             0 => (),
             -1 => eprintln!(
                 "ERROR: LibcOpenSocket.close() -> {}",
-                IOError::last_os_error()
+                Error::last_os_error()
             ),
             err => eprintln!("ERROR: LibcOpenSocket.close() -> {err}"),
         }
@@ -104,7 +93,7 @@ mod tests {
 
     use super::*;
     use std::io;
-    use sys::mock::MockSys;
+    use sys::{mock::MockSys, Sys};
 
     // #[test]
     // fn test_socket_new() {
@@ -140,7 +129,7 @@ mod tests {
         let expected_mac_address = "00:11:22:33:44:55";
 
         let sys = MockSys::default().with_nic(name, expected_mac_address);
-        let socket = LibcSocket::new(sys.as_sys());
+        let socket = LibcSocket { sys: sys.as_sys() };
 
         let mut ifr = ifr::new();
         ifr::set_name(&mut ifr, name);
@@ -163,7 +152,7 @@ mod tests {
     //     let fd = socket.open_local_dgram()?;
     //     assert_eq!(
     //         socket.get_lladdr(&mut [0; 16])?,
-    //         Err(IOError::last_os_error())
+    //         Err(Error::last_os_error())
     //     );
     //     Ok(())
     // }
@@ -175,7 +164,7 @@ mod tests {
         let mac_address = "00:11:22:33:44:55";
 
         let sys = MockSys::default();
-        let socket = LibcSocket::new(sys.as_sys());
+        let socket = LibcSocket { sys: sys.as_sys() };
 
         let mut ifr = ifr::new();
         ifr::set_name(&mut ifr, name);
@@ -198,7 +187,7 @@ mod tests {
     //     let fd = socket.open_local_dgram()?;
     //     assert_eq!(
     //         socket.set_lladdr(&mut [0; 16])?,
-    //         Err(IOError::last_os_error())
+    //         Err(Error::last_os_error())
     //     );
     //     Ok(())
     // }
@@ -218,21 +207,21 @@ mod tests {
 pub(crate) mod mock {
     use crate::macos::ifr;
 
-    use super::{DynOpenSocket, DynSocket, IOError, OpenSocket, Socket};
-    use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
+    use super::{DynOpenSocket, OpenSocket, Socket};
+    use std::{cell::RefCell, collections::HashMap, io::{self, Error}, rc::Rc};
 
     type KeyValue = RefCell<HashMap<String, String>>;
 
-    #[derive(Debug, Default)]
+    #[derive(Clone, Debug, Default)]
     pub(crate) struct MockSocket {
         kv: Rc<KeyValue>,
     }
 
     impl MockSocket {
-        pub(crate) fn as_sys(&self) -> Rc<DynSocket> {
-            Rc::new(Box::new(Self {
+        pub(crate) fn as_socket(&self) -> Box<dyn Socket> {
+            Box::new(Self {
                 kv: Rc::clone(&self.kv),
-            }))
+            })
         }
         pub(crate) fn with_nic(self, name: &str, mac_address: &str) -> Self {
             self.set_nic(name, mac_address);
@@ -261,12 +250,13 @@ pub(crate) mod mock {
             }))
         }
     }
+    #[derive(Clone, Debug, Default)]
     pub(crate) struct MockOpenSocket {
         kv: Rc<KeyValue>,
     }
 
     impl OpenSocket for MockOpenSocket {
-        fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<(), IOError> {
+        fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error> {
             let ifr = ifr::from_c_void_ptr(arg);
             let name = ifr::get_name(ifr);
             match self.kv.borrow().get(name) {
@@ -279,7 +269,7 @@ pub(crate) mod mock {
             Ok(())
         }
 
-        fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<(), IOError> {
+        fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error> {
             let ifr = ifr::from_c_void_ptr(arg);
             let name = ifr::get_name(ifr);
             let mac_address = ifr::get_mac_address(ifr);
