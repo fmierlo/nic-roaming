@@ -1,85 +1,53 @@
-use std::io::Error as IOError;
 use std::rc::Rc;
 
-use super::{ifr, sys};
+use super::{ifr, socket::DynSocket};
 
-pub fn new() -> Nic<sys::LibcSys> {
-    Nic::new(&sys::new())
+#[derive(Default)]
+pub struct Nic {
+    socket: Rc<DynSocket>,
 }
 
-pub struct Nic<T: sys::Sys> {
-    sys: Rc<T>,
-}
-
-impl<T> Nic<T>
-where
-    T: sys::Sys,
-{
-    fn new(sys: &Rc<T>) -> Nic<T> {
-        Nic {
-            sys: Rc::clone(sys),
-        }
+impl Nic {
+    #[cfg(test)]
+    fn new(socket: Rc<DynSocket>) -> Rc<Nic> {
+        Rc::new(Self { socket })
     }
 
     pub fn get_mac_address(&self, name: &str) -> String {
-        println!("get_mac_address({})", name);
-
         let mut ifr = ifr::new();
         ifr::set_name(&mut ifr, name);
 
-        let s = self.sys.socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0);
-        error("socket", s);
-
-        let ret = self
-            .sys
-            .ioctl(s, sys::SIOCGIFLLADDR, ifr::to_c_void_ptr(&mut ifr));
-        error("ioctl", ret);
-
-        let ret = self.sys.close(s);
-        error("close", ret);
+        let _ = match self.socket.open_local_dgram() {
+            Ok(s) => s
+                .get_lladdr(ifr::to_c_void_ptr(&mut ifr))
+                .unwrap_or_default(),
+            Err(_) => todo!(),
+        };
 
         let mac_str = ifr::get_mac_address(&ifr);
-
-        println!("get_mac_address({mac_str})");
 
         mac_str
     }
 
     pub fn set_mac_address(&self, name: &str, mac_address: &str) -> bool {
-        println!("set_mac_address({}, {mac_address})", name);
-
         let mut ifr = ifr::new();
         ifr::set_name(&mut ifr, &name);
         ifr::set_mac_address(&mut ifr, &mac_address);
 
-        let s = self.sys.socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0);
-        error("socket", s);
-
-        let ret = self
-            .sys
-            .ioctl(s, sys::SIOCSIFLLADDR, ifr::to_c_void_ptr(&mut ifr));
-        error("ioctl", ret);
-
-        let ret = self.sys.close(s);
-        error("close", ret);
-
+        let _ = match self.socket.open_local_dgram() {
+            Ok(s) => s
+                .set_lladdr(ifr::to_c_void_ptr(&mut ifr))
+                .unwrap_or_default(),
+            Err(_) => todo!(),
+        };
         true
-    }
-}
-
-fn error(prefix: &str, s: libc::c_int) {
-    if s < 0 {
-        let err = IOError::last_os_error();
-        println!("{prefix}: {s} {err}");
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use crate::{macos::sys, nic::Nic};
-
-    use sys::tests::MockSys;
+    use crate::{macos::socket::mock::MockSocket, nic::Nic};
 
     #[test]
     fn test_get_mac_address() {
@@ -87,8 +55,8 @@ mod tests {
         let name = "en";
         let expected_mac_address = "00:11:22:33:44:55";
 
-        let mocked_sys = MockSys::new().with_nic(name, expected_mac_address);
-        let nic = Nic::new(&mocked_sys);
+        let socket = MockSocket::default().with_nic(name, expected_mac_address);
+        let nic = Nic::new(socket.as_sys());
         // When
         let mac_address = nic.get_mac_address(&name);
         // Then
@@ -101,11 +69,11 @@ mod tests {
         let name = "en";
         let mac_address = "00:11:22:33:44:55";
 
-        let mocked_sys = MockSys::new();
-        let nic = Nic::new(&mocked_sys);
+        let socket = MockSocket::default();
+        let nic = Nic::new(socket.as_sys());
         // When
         let _ = nic.set_mac_address(&name, &mac_address);
         // Then
-        assert!(mocked_sys.has_nic(&name, &mac_address));
+        assert!(socket.has_nic(&name, &mac_address));
     }
 }

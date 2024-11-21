@@ -1,5 +1,22 @@
+// /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/ioccom.h
+
+// /* copy parameters out */
+// #define IOC_OUT         (__uint32_t)0x40000000
+// /* copy parameters in */
+// #define IOC_IN          (__uint32_t)0x80000000
+// /* copy parameters in and out */
+// #define IOC_INOUT       (IOC_IN|IOC_OUT)
+
+// #define _IOC(inout, group, num, len) \
+// 	(inout | ((len & IOCPARM_MASK) << 16) | ((group) << 8) | (num))
+// #define _IOW(g, n, t)     _IOC(IOC_IN,	(g), (n), sizeof(t))
+// /* this should be _IORW, but stdio got there first */
+// #define _IOWR(g, n, t)    _IOC(IOC_INOUT,	(g), (n), sizeof(t))
+
+// 'i' as u8 = 105
+// mem::size_of::<ifreq>() = 32
+
 use libc::{c_int, c_ulong, c_void};
-use std::rc::Rc;
 
 // #define SIOCSIFLLADDR   _IOW('i', 60, struct ifreq)     /* set link level addr */
 // s = 0x80000000 | 32 << 16 | (105 << 8) | 60
@@ -9,23 +26,22 @@ pub(crate) const SIOCSIFLLADDR: c_ulong = 0x8020693c;
 // g = (0x80000000 |0x40000000) | 32 << 16 | (105 << 8) | 158
 pub(crate) const SIOCGIFLLADDR: c_ulong = 0xc020699e;
 
-pub fn new() -> Rc<LibcSys> {
-    LibcSys::new()
-}
-
-pub trait Sys {
+pub(crate) trait Sys {
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int;
     fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int;
     fn close(&self, fd: c_int) -> c_int;
 }
 
-pub struct LibcSys {}
+pub(crate) type DynSys = Box<dyn Sys>;
 
-impl LibcSys {
-    pub(crate) fn new() -> Rc<Self> {
-        Rc::new(Self {})
+impl Default for Box<dyn Sys> {
+    fn default() -> Box<dyn Sys> {
+        Box::new(LibcSys {})
     }
 }
+
+#[derive(Debug, Default)]
+pub struct LibcSys {}
 
 impl Sys for LibcSys {
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
@@ -42,38 +58,37 @@ impl Sys for LibcSys {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub(crate) mod mock {
     use libc::{c_int, c_ulong, c_void};
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     use crate::macos::ifr;
 
-    use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
+    use super::{DynSys, Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
+    type KeyValue = Rc<RefCell<HashMap<String, String>>>;
+
+    #[derive(Debug, Default)]
     pub(crate) struct MockSys {
-        nic_list: RefCell<HashMap<String, String>>,
+        kv: KeyValue,
     }
 
     impl MockSys {
-        pub(crate) fn new() -> Rc<Self> {
-            Rc::new(Self {
-                nic_list: RefCell::new(HashMap::new()),
-            })
+        pub(crate) fn as_sys(&self) -> Rc<DynSys> {
+            Rc::new(Box::new(Self {
+                kv: Rc::clone(&self.kv),
+            }))
         }
 
-        pub(crate) fn with_nic(self: Rc<Self>, name: &str, mac_address: &str) -> Rc<Self> {
-            self.set_nic(name, mac_address);
+        pub(crate) fn with_nic(self, name: &str, mac_address: &str) -> Self {
+            self.kv
+                .borrow_mut()
+                .insert(name.to_string(), mac_address.to_string());
             self
         }
 
-        pub(crate) fn set_nic(&self, name: &str, mac_address: &str) {
-            self.nic_list
-                .borrow_mut()
-                .insert(name.to_string(), mac_address.to_string());
-        }
-
         pub(crate) fn has_nic(&self, name: &str, expected_mac_address: &str) -> bool {
-            match self.nic_list.borrow().get(name) {
+            match self.kv.borrow().get(name) {
                 Some(mac_address) => mac_address == expected_mac_address,
                 None => false,
             }
@@ -82,36 +97,39 @@ pub(crate) mod tests {
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-            println!("socket: domain={domain} ty={ty} protocol={protocol}");
+            eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol})");
             0
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-            println!("ioctl: fd={fd} request={request} arg={arg:?}");
-
             let ifr = ifr::from_c_void_ptr(arg);
             let name = ifr::get_name(ifr);
 
             match request {
                 SIOCGIFLLADDR => {
-                    match self.nic_list.borrow().get(name) {
-                        Some(mac_address) => ifr::set_mac_address(ifr, &mac_address),
+                    match self.kv.borrow().get(name) {
+                        Some(mac_address) => {
+                            eprintln!("MockSys.ioctl(fd={fd}, request={request}, {name}) -> {mac_address}");
+                            ifr::set_mac_address(ifr, &mac_address);
+                        }
                         _ => {}
                     };
                 }
                 SIOCSIFLLADDR => {
                     let mac_address: String;
                     mac_address = ifr::get_mac_address(ifr);
-                    self.set_nic(name, &mac_address);
+                    eprintln!("MockSys.ioctl(fd={fd}, request={request}, {name}, {mac_address})");
+                    self.kv
+                        .borrow_mut()
+                        .insert(name.to_string(), mac_address.to_string());
                 }
                 _ => {}
             }
-
             0
         }
 
         fn close(&self, fd: c_int) -> c_int {
-            println!("close: fd={fd}");
+            eprintln!("MockSys.close(fd={fd})");
             0
         }
     }
