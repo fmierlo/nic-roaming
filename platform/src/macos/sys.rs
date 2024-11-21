@@ -66,11 +66,11 @@ pub(crate) mod mock {
 
     use super::{DynSys, Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
-    type KeyValue = Rc<RefCell<HashMap<String, String>>>;
+    type KeyValue = RefCell<HashMap<String, String>>;
 
     #[derive(Debug, Default)]
     pub(crate) struct MockSys {
-        kv: KeyValue,
+        kv: Rc<KeyValue>,
     }
 
     impl MockSys {

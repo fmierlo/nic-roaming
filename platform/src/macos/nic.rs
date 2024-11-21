@@ -10,7 +10,9 @@ pub struct Nic {
 impl Nic {
     #[cfg(test)]
     fn new(socket: Rc<DynSocket>) -> Rc<Nic> {
-        Rc::new(Self { socket })
+        Rc::new(Self {
+            socket: Rc::clone(&socket),
+        })
     }
 
     pub fn get_mac_address(&self, name: &str) -> String {

@@ -24,7 +24,9 @@ pub(crate) struct LibcSocket {
 impl LibcSocket {
     #[cfg(test)]
     fn new(sys: Rc<DynSys>) -> Rc<LibcSocket> {
-        Rc::new(Self { sys })
+        Rc::new(Self {
+            sys: Rc::clone(&sys),
+        })
     }
 }
 
@@ -87,7 +89,10 @@ impl Drop for LibcOpenSocket {
     fn drop(&mut self) {
         match self.sys.close(self.fd) {
             0 => (),
-            -1 => eprintln!("ERROR: LibcOpenSocket.close() -> {}", IOError::last_os_error()),
+            -1 => eprintln!(
+                "ERROR: LibcOpenSocket.close() -> {}",
+                IOError::last_os_error()
+            ),
             err => eprintln!("ERROR: LibcOpenSocket.close() -> {err}"),
         }
     }
@@ -216,11 +221,11 @@ pub(crate) mod mock {
     use super::{DynOpenSocket, DynSocket, IOError, OpenSocket, Socket};
     use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
 
-    type KeyValue = Rc<RefCell<HashMap<String, String>>>;
+    type KeyValue = RefCell<HashMap<String, String>>;
 
     #[derive(Debug, Default)]
     pub(crate) struct MockSocket {
-        kv: KeyValue,
+        kv: Rc<KeyValue>,
     }
 
     impl MockSocket {
@@ -257,7 +262,7 @@ pub(crate) mod mock {
         }
     }
     pub(crate) struct MockOpenSocket {
-        kv: KeyValue,
+        kv: Rc<KeyValue>,
     }
 
     impl OpenSocket for MockOpenSocket {
