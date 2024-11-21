@@ -111,9 +111,10 @@ pub(crate) mod mock {
                         Some(mac_address) => {
                             eprintln!("MockSys.ioctl(fd={fd}, request={request}, {name}) -> {mac_address}");
                             ifr::set_mac_address(ifr, &mac_address);
+                            0
                         }
-                        _ => {}
-                    };
+                        _ => -1
+                    }
                 }
                 SIOCSIFLLADDR => {
                     let mac_address: String;
@@ -122,10 +123,10 @@ pub(crate) mod mock {
                     self.kv
                         .borrow_mut()
                         .insert(name.to_string(), mac_address.to_string());
+                    0
                 }
-                _ => {}
+                _ => -1
             }
-            0
         }
 
         fn close(&self, fd: c_int) -> c_int {
