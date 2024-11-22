@@ -1,6 +1,6 @@
 use super::{ifr, socket::Socket};
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Nic {
     socket: Box<dyn Socket>,
 }
@@ -42,6 +42,14 @@ mod tests {
 
     use crate::{macos::socket::mock::MockSocket, nic::Nic};
 
+    impl Nic {
+        fn new(socket: &MockSocket) -> Nic {
+            Nic {
+                socket: Box::new(socket.clone()),
+            }
+        }
+    }
+
     #[test]
     fn test_get_mac_address() {
         // Given
@@ -49,11 +57,8 @@ mod tests {
         let expected_mac_address = "00:11:22:33:44:55";
 
         let socket = MockSocket::default().with_nic(name, expected_mac_address);
-        let nic = Nic {
-            socket: socket.as_socket(),
-        };
         // When
-        let mac_address = nic.get_mac_address(&name);
+        let mac_address = Nic::new(&socket).get_mac_address(&name);
         // Then
         assert_eq!(mac_address, expected_mac_address)
     }
@@ -65,11 +70,8 @@ mod tests {
         let mac_address = "00:11:22:33:44:55";
 
         let socket = MockSocket::default();
-        let nic = Nic {
-            socket: socket.as_socket(),
-        };
         // When
-        let _ = nic.set_mac_address(&name, &mac_address);
+        let _ = Nic::new(&socket).set_mac_address(&name, &mac_address);
         // Then
         assert!(socket.has_nic(&name, &mac_address));
     }
