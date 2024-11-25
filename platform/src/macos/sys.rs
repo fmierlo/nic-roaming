@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Deref};
 
 use libc::{c_int, c_ulong, c_void};
 
@@ -34,15 +34,24 @@ pub(crate) trait Sys: Debug {
     fn close(&self, fd: c_int) -> c_int;
 }
 
-pub(crate) static SYS: LibcSys = LibcSys {};
+#[derive(Debug, Default)]
+pub(crate) struct DynSys(pub(crate) Box<dyn Sys>);
 
-impl<'a> Default for &'a dyn Sys {
+impl Default for Box<dyn Sys> {
     fn default() -> Self {
-        &SYS
+        Box::new(LibcSys::default())
     }
 }
 
-#[derive(Debug)]
+impl Deref for DynSys {
+    type Target = Box<dyn Sys>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct LibcSys {}
 
 impl Sys for LibcSys {
@@ -98,12 +107,12 @@ pub(crate) mod mock {
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-            let ifr = ifr::from_c_void_ptr(arg);
+            let ifr = ifr::from_mut_ptr(arg);
             let name = ifr::get_name(ifr);
 
             match request {
                 SIOCGIFLLADDR => {
-                    match self.kv.borrow().get(name) {
+                    match self.kv.borrow().get(name.as_str()) {
                         Some(mac_address) => {
                             eprintln!("MockSys.ioctl(fd={fd}, request={request}, {name}) -> {mac_address}");
                             ifr::set_mac_address(ifr, &mac_address);

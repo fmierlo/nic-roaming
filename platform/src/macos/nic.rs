@@ -1,36 +1,29 @@
-use super::{ifr, socket::Socket};
-
+use super::{
+    ifr::{Ifr, IfrGet, IfrSet},
+    socket::DynSocket,
+};
 #[derive(Debug, Default)]
 pub struct Nic {
-    socket: Box<dyn Socket>,
+    socket: DynSocket,
 }
 
 impl Nic {
     pub fn get_mac_address(&self, name: &str) -> String {
-        let mut ifr = ifr::new();
-        ifr::set_name(&mut ifr, name);
+        let mut ifr: Ifr = IfrGet { name }.into();
 
         let _ = match self.socket.open_local_dgram() {
-            Ok(s) => s
-                .get_lladdr(ifr::to_c_void_ptr(&mut ifr))
-                .unwrap_or_default(),
+            Ok(socket) => socket.get_lladdr(ifr.as_mut_ptr()).unwrap_or_default(),
             Err(_) => todo!(),
         };
 
-        let mac_str = ifr::get_mac_address(&ifr);
-
-        mac_str
+        ifr.mac_address()
     }
 
     pub fn set_mac_address(&self, name: &str, mac_address: &str) -> bool {
-        let mut ifr = ifr::new();
-        ifr::set_name(&mut ifr, &name);
-        ifr::set_mac_address(&mut ifr, &mac_address);
+        let mut ifr: Ifr = IfrSet { name, mac_address }.into();
 
         let _ = match self.socket.open_local_dgram() {
-            Ok(s) => s
-                .set_lladdr(ifr::to_c_void_ptr(&mut ifr))
-                .unwrap_or_default(),
+            Ok(socket) => socket.set_lladdr(ifr.as_mut_ptr()).unwrap_or_default(),
             Err(_) => todo!(),
         };
         true
@@ -42,10 +35,12 @@ mod tests {
 
     use crate::{macos::socket::mock::MockSocket, nic::Nic};
 
+    use super::DynSocket;
+
     impl Nic {
         fn new(socket: &MockSocket) -> Nic {
             Nic {
-                socket: Box::new(socket.clone()),
+                socket: DynSocket(Box::new(socket.clone())),
             }
         }
     }

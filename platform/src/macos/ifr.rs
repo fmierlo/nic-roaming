@@ -2,18 +2,52 @@ use std::{ffi::CString, ptr};
 
 use libc::{c_void, ifreq};
 
-pub(crate) fn new() -> ifreq {
-    unsafe { std::mem::zeroed() }
+pub(crate) struct IfrGet<'a> {
+    pub(crate) name: &'a str,
 }
 
-// .ioctl(s, request, ifr as *mut _ as *mut sys::c_void);
-// .ioctl(s, request, ifr as *const _ as *mut sys::c_void);
-pub(crate) fn to_c_void_ptr(ifr: &mut ifreq) -> *mut c_void {
-    ifr as *mut _ as *mut c_void
+pub(crate) struct IfrSet<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) mac_address: &'a str,
+}
+
+pub(crate) struct Ifr {
+    ifr: libc::ifreq,
+}
+
+impl Ifr {
+    pub(crate) fn mac_address(&self) -> String {
+        get_mac_address(&self.ifr)
+    }
+
+    pub fn as_mut_ptr(&mut self) -> *mut c_void {
+        as_mut_ptr(&mut self.ifr)
+    }
+}
+
+impl<'a> From<IfrGet<'a>> for Ifr {
+    fn from(value: IfrGet<'a>) -> Self {
+        let mut ifr = unsafe { std::mem::zeroed() };
+        set_name(&mut ifr, &value.name);
+        Self { ifr }
+    }
+}
+
+impl<'a> From<IfrSet<'a>> for Ifr {
+    fn from(value: IfrSet<'a>) -> Self {
+        let mut ifr = unsafe { std::mem::zeroed() };
+        set_name(&mut ifr, &value.name);
+        set_mac_address(&mut ifr, &value.mac_address);
+        Self { ifr }
+    }
+}
+
+fn as_mut_ptr(ifr: &mut ifreq) -> *mut c_void {
+    ifr as *const _ as *mut c_void
 }
 
 #[cfg(test)]
-pub(crate) fn from_c_void_ptr(arg: *mut c_void) -> &'static mut ifreq {
+pub(crate) fn from_mut_ptr<'a>(arg: *mut c_void) -> &'a mut ifreq {
     unsafe { &mut *(arg as *mut _ as *mut ifreq) }
 }
 
@@ -52,17 +86,17 @@ pub(crate) fn set_mac_address(ifr: &mut ifreq, mac_address: &str) {
 }
 
 #[cfg(test)]
-pub(crate) fn get_name(ifr: &ifreq) -> &str {
+pub(crate) fn get_name(ifr: &ifreq) -> String {
     use std::ffi::CStr;
 
     let ifr_name = unsafe { CStr::from_ptr(ifr.ifr_name.as_ptr()) };
     match ifr_name.to_str() {
-        Ok(s) => s,
-        Err(_) => "",
+        Ok(s) => String::from(s),
+        Err(_) => String::from(""),
     }
 }
 
-pub(crate) fn set_name(ifr: &mut ifreq, name: &str) {
+fn set_name(ifr: &mut ifreq, name: &str) {
     let ifr_name = CString::new(name).unwrap();
 
     unsafe {
