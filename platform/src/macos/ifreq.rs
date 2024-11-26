@@ -45,7 +45,7 @@ pub(crate) fn set_mac_address(ifreq: &mut ifreq, mac_address: &str) -> Result<()
         .collect();
 
     if mac_bytes.len() != 6 {
-        return Err("Invalid MAC address format. Must be 6 bytes in hex format.".into());
+        return Err(format!("MAC address isn't 6 bytes in hex format: mac_address={mac_address} len={}", mac_bytes.len()).into());
     }
 
     unsafe {
