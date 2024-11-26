@@ -3,14 +3,14 @@ use std::io::Error;
 use std::io::{self, ErrorKind};
 use std::ops::Deref;
 
-use super::sys::{self, DynSys};
+use super::sys::{self, BoxSys};
 
 pub(crate) trait Socket: Debug {
     fn open_local_dgram(&self) -> io::Result<Box<dyn OpenSocket + '_>>;
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct DynSocket(pub(crate) Box<dyn Socket>);
+pub(crate) struct BoxSocket(pub(crate) Box<dyn Socket>);
 
 impl Default for Box<dyn Socket> {
     fn default() -> Self {
@@ -18,7 +18,7 @@ impl Default for Box<dyn Socket> {
     }
 }
 
-impl Deref for DynSocket {
+impl Deref for BoxSocket {
     type Target = Box<dyn Socket>;
 
     fn deref(&self) -> &Self::Target {
@@ -27,10 +27,10 @@ impl Deref for DynSocket {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct LibcSocket(DynSys);
+pub(crate) struct LibcSocket(BoxSys);
 
 impl Deref for LibcSocket {
-    type Target = DynSys;
+    type Target = BoxSys;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -53,11 +53,11 @@ pub(crate) trait OpenSocket {
 
 pub(crate) struct LibcOpenSocket<'a> {
     fd: libc::c_int,
-    sys: &'a DynSys,
+    sys: &'a BoxSys,
 }
 
 impl<'a> Deref for LibcOpenSocket<'a> {
-    type Target = &'a DynSys;
+    type Target = &'a BoxSys;
 
     fn deref(&self) -> &Self::Target {
         &self.sys
@@ -103,7 +103,7 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::macos::ifr::{Ifr, IfrGet, IfrSet};
+    use crate::macos::ifreq::{self};
 
     use super::*;
     use std::io;
@@ -111,7 +111,7 @@ mod tests {
 
     impl<'a> LibcSocket {
         fn new(sys: &MockSys) -> LibcSocket {
-            LibcSocket(DynSys(Box::new(sys.clone())))
+            LibcSocket(BoxSys(Box::new(sys.clone())))
         }
     }
 
@@ -148,13 +148,14 @@ mod tests {
         let name = "en";
         let expected_mac_address = "00:11:22:33:44:55";
         let sys = MockSys::default().with_nic(name, expected_mac_address);
-        let mut ifr = Ifr::from(IfrGet { name });
+        let mut ifreq = ifreq::new();
+        ifreq::set_name(&mut ifreq, &name);
         // When
         LibcSocket::new(&sys)
             .open_local_dgram()?
-            .get_lladdr(ifr.as_mut_ptr())?;
+            .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
         // Then
-        assert_eq!(ifr.mac_address(), expected_mac_address);
+        assert_eq!(ifreq::get_mac_address(&ifreq), expected_mac_address);
         Ok(())
     }
 
@@ -178,11 +179,13 @@ mod tests {
         let name = "en";
         let mac_address = "00:11:22:33:44:55";
         let sys = MockSys::default();
-        let mut ifr = Ifr::from(IfrSet { name, mac_address });
+        let mut ifreq = ifreq::new();
+        ifreq::set_name(&mut ifreq, &name);
+        ifreq::set_mac_address(&mut ifreq, mac_address);
         // When
         LibcSocket::new(&sys)
             .open_local_dgram()?
-            .set_lladdr(ifr.as_mut_ptr())?;
+            .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
         // Then
         assert!(sys.has_nic(&name, &mac_address));
         Ok(())
@@ -215,7 +218,7 @@ mod tests {
 
 #[cfg(test)]
 pub(crate) mod mock {
-    use crate::macos::ifr;
+    use crate::macos::ifreq::{self};
 
     use super::{OpenSocket, Socket};
     use std::{
@@ -265,26 +268,21 @@ pub(crate) mod mock {
 
     impl<'a> OpenSocket for MockOpenSocket<'a> {
         fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error> {
-            let ifr = ifr::from_mut_ptr(arg);
-            let name = ifr::get_name(ifr);
-            match self.kv.borrow().get(name.as_str()) {
-                Some(mac_address) => {
-                    eprintln!("MockOpenSocket.get_lladdr({name}) -> {mac_address})");
-                    ifr::set_mac_address(ifr, &mac_address)
-                }
-                _ => {}
+            let ifreq = ifreq::from_mut_ptr(arg);
+            let name = ifreq::get_name(ifreq);
+            if let Some(mac_address) = self.kv.borrow().get(name.as_str()) {
+                eprintln!("MockOpenSocket.get_lladdr({name}) -> {mac_address})");
+                ifreq::set_mac_address(ifreq, &mac_address)
             };
             Ok(())
         }
 
         fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<(), Error> {
-            let ifr = ifr::from_mut_ptr(arg);
-            let name = ifr::get_name(ifr);
-            let mac_address = ifr::get_mac_address(ifr);
+            let ifreq = ifreq::from_mut_ptr(arg);
+            let name = ifreq::get_name(ifreq);
+            let mac_address = ifreq::get_mac_address(ifreq);
             eprintln!("MockOpenSocket.set_lladdr({name}, {mac_address})");
-            self.kv
-                .borrow_mut()
-                .insert(name.to_string(), mac_address.to_string());
+            self.kv.borrow_mut().insert(name, mac_address);
             Ok(())
         }
     }

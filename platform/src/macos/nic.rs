@@ -1,29 +1,37 @@
 use super::{
-    ifr::{Ifr, IfrGet, IfrSet},
-    socket::DynSocket,
+    ifreq::{self},
+    socket::BoxSocket,
 };
+
 #[derive(Debug, Default)]
 pub struct Nic {
-    socket: DynSocket,
+    socket: BoxSocket,
 }
 
 impl Nic {
     pub fn get_mac_address(&self, name: &str) -> String {
-        let mut ifr: Ifr = IfrGet { name }.into();
+        let mut ifreq = ifreq::new();
+        ifreq::set_name(&mut ifreq, &name);
 
         let _ = match self.socket.open_local_dgram() {
-            Ok(socket) => socket.get_lladdr(ifr.as_mut_ptr()).unwrap_or_default(),
+            Ok(socket) => socket
+                .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))
+                .unwrap_or_default(),
             Err(_) => todo!(),
         };
 
-        ifr.mac_address()
+        ifreq::get_mac_address(&ifreq)
     }
 
     pub fn set_mac_address(&self, name: &str, mac_address: &str) -> bool {
-        let mut ifr: Ifr = IfrSet { name, mac_address }.into();
+        let mut ifreq = ifreq::new();
+        ifreq::set_name(&mut ifreq, &name);
+        ifreq::set_mac_address(&mut ifreq, mac_address);
 
         let _ = match self.socket.open_local_dgram() {
-            Ok(socket) => socket.set_lladdr(ifr.as_mut_ptr()).unwrap_or_default(),
+            Ok(socket) => socket
+                .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))
+                .unwrap_or_default(),
             Err(_) => todo!(),
         };
         true
@@ -35,12 +43,12 @@ mod tests {
 
     use crate::{macos::socket::mock::MockSocket, nic::Nic};
 
-    use super::DynSocket;
+    use super::BoxSocket;
 
     impl Nic {
         fn new(socket: &MockSocket) -> Nic {
             Nic {
-                socket: DynSocket(Box::new(socket.clone())),
+                socket: BoxSocket(Box::new(socket.clone())),
             }
         }
     }

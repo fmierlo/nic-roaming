@@ -35,7 +35,7 @@ pub(crate) trait Sys: Debug {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct DynSys(pub(crate) Box<dyn Sys>);
+pub(crate) struct BoxSys(pub(crate) Box<dyn Sys>);
 
 impl Default for Box<dyn Sys> {
     fn default() -> Self {
@@ -43,7 +43,7 @@ impl Default for Box<dyn Sys> {
     }
 }
 
-impl Deref for DynSys {
+impl Deref for BoxSys {
     type Target = Box<dyn Sys>;
 
     fn deref(&self) -> &Self::Target {
@@ -52,7 +52,7 @@ impl Deref for DynSys {
 }
 
 #[derive(Debug, Default)]
-pub struct LibcSys {}
+pub(crate) struct LibcSys {}
 
 impl Sys for LibcSys {
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
@@ -73,7 +73,7 @@ pub(crate) mod mock {
     use libc::{c_int, c_ulong, c_void};
     use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
-    use crate::macos::ifr::{self};
+    use crate::macos::ifreq::{self};
 
     use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
@@ -107,15 +107,15 @@ pub(crate) mod mock {
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-            let ifr = ifr::from_mut_ptr(arg);
-            let name = ifr::get_name(ifr);
+            let ifreq = ifreq::from_mut_ptr(arg);
+            let name = ifreq::get_name(ifreq);
 
             match request {
                 SIOCGIFLLADDR => {
-                    match self.kv.borrow().get(name.as_str()) {
+                    match self.kv.borrow().get(&name) {
                         Some(mac_address) => {
                             eprintln!("MockSys.ioctl(fd={fd}, request={request}, {name}) -> {mac_address}");
-                            ifr::set_mac_address(ifr, &mac_address);
+                            ifreq::set_mac_address(ifreq, &mac_address);
                             0
                         }
                         _ => -1,
@@ -123,11 +123,9 @@ pub(crate) mod mock {
                 }
                 SIOCSIFLLADDR => {
                     let mac_address: String;
-                    mac_address = ifr::get_mac_address(ifr);
+                    mac_address = ifreq::get_mac_address(ifreq);
                     eprintln!("MockSys.ioctl(fd={fd}, request={request}, {name}, {mac_address})");
-                    self.kv
-                        .borrow_mut()
-                        .insert(name.to_string(), mac_address.to_string());
+                    self.kv.borrow_mut().insert(name, mac_address);
                     0
                 }
                 _ => -1,
