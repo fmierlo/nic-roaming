@@ -1,3 +1,5 @@
+use crate::Result;
+
 use super::{
     ifreq::{self},
     socket::BoxSocket,
@@ -9,39 +11,34 @@ pub struct Nic {
 }
 
 impl Nic {
-    pub fn get_mac_address(&self, name: &str) -> String {
+    pub fn get_mac_address(&self, name: &str) -> Result<String> {
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &name);
+        ifreq::set_name(&mut ifreq, &name)?;
 
-        let _ = match self.socket.open_local_dgram() {
-            Ok(socket) => socket
-                .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))
-                .unwrap_or_default(),
-            Err(_) => todo!(),
-        };
+        self.socket
+            .open_local_dgram()?
+            .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
 
-        ifreq::get_mac_address(&ifreq)
+        Ok(ifreq::get_mac_address(&ifreq))
     }
 
-    pub fn set_mac_address(&self, name: &str, mac_address: &str) -> bool {
+    pub fn set_mac_address(&self, name: &str, mac_address: &str) -> Result<()> {
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &name);
-        ifreq::set_mac_address(&mut ifreq, mac_address);
+        ifreq::set_name(&mut ifreq, &name)?;
+        ifreq::set_mac_address(&mut ifreq, mac_address)?;
 
-        let _ = match self.socket.open_local_dgram() {
-            Ok(socket) => socket
-                .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))
-                .unwrap_or_default(),
-            Err(_) => todo!(),
-        };
-        true
+        self.socket
+            .open_local_dgram()?
+            .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use crate::{macos::socket::mock::MockSocket, nic::Nic};
+    use crate::{macos::socket::mock::MockSocket, nic::Nic, Result};
 
     use super::BoxSocket;
 
@@ -54,16 +51,18 @@ mod tests {
     }
 
     #[test]
-    fn test_get_mac_address() {
+    fn test_get_mac_address() -> Result<()> {
         // Given
         let name = "en";
         let expected_mac_address = "00:11:22:33:44:55";
 
         let socket = MockSocket::default().with_nic(name, expected_mac_address);
         // When
-        let mac_address = Nic::new(&socket).get_mac_address(&name);
+        let mac_address = Nic::new(&socket).get_mac_address(&name)?;
         // Then
-        assert_eq!(mac_address, expected_mac_address)
+        assert_eq!(mac_address, expected_mac_address);
+
+        Ok(())
     }
 
     #[test]

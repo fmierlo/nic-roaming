@@ -2,6 +2,8 @@ use std::{ffi::CString, ptr};
 
 use libc::{c_void, ifreq};
 
+use crate::Result;
+
 pub(crate) fn new() -> ifreq {
     unsafe { std::mem::zeroed() }
 }
@@ -15,9 +17,8 @@ pub(crate) fn from_mut_ptr<'a>(arg: *mut c_void) -> &'a mut ifreq {
     unsafe { &mut *(arg as *mut _ as *mut ifreq) }
 }
 
-pub(crate) fn set_name(ifreq: &mut ifreq, name: &str) {
-    let name = CString::new(name).unwrap();
-
+pub(crate) fn set_name(ifreq: &mut ifreq, name: &str) -> Result<()> {
+    let name = CString::new(name)?;
     unsafe {
         ptr::copy_nonoverlapping(
             name.as_ptr(),
@@ -25,37 +26,39 @@ pub(crate) fn set_name(ifreq: &mut ifreq, name: &str) {
             name.as_bytes().len(),
         );
     }
+    Ok(())
 }
 
 #[cfg(test)]
-pub(crate) fn get_name(ifreq: &ifreq) -> String {
+pub(crate) fn get_name(ifreq: &ifreq) -> Result<String> {
     use std::ffi::CStr;
 
     let name = unsafe { CStr::from_ptr(ifreq.ifr_name.as_ptr()) };
-    match name.to_str() {
-        Ok(s) => String::from(s),
-        Err(_) => String::from(""),
-    }
+    let name = name.to_str()?;
+    Ok(String::from(name))
 }
 
-pub(crate) fn set_mac_address(ifreq: &mut ifreq, mac_address: &str) {
+pub(crate) fn set_mac_address(ifreq: &mut ifreq, mac_address: &str) -> Result<()> {
     let mac_bytes: Vec<u8> = mac_address
         .split(':')
         .filter_map(|s| u8::from_str_radix(s, 16).ok())
         .collect();
-    // if mac_bytes.len() != 6 {
-    //     eprintln!("ERROR: Invalid MAC address format. Must be 6 bytes in hex format.");
-    //     return ControlFlow::Break(());
-    // }
+
+    if mac_bytes.len() != 6 {
+        return Err("Invalid MAC address format. Must be 6 bytes in hex format.".into());
+    }
+
     unsafe {
-        // Copy MAC address into sockaddr_dl
         ptr::copy_nonoverlapping(
             mac_bytes.as_ptr(),
             ifreq.ifr_ifru.ifru_addr.sa_data.as_mut_ptr() as *mut u8,
             6,
         );
     }
+
     ifreq.ifr_ifru.ifru_addr.sa_len = 6;
+
+    Ok(())
 }
 
 pub(crate) fn get_mac_address(ifreq: &ifreq) -> String {

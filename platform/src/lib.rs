@@ -1,3 +1,6 @@
+use std::{error::Error, result};
+
+pub type Result<T> = result::Result<T, Box<dyn Error>>;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 compile_error!("Unsupported platform!");
