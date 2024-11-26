@@ -132,7 +132,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_socket_open_local_dgram() -> io::Result<()> {
+    // fn test_socket_open_local_dgram() -> Result<()> {
     //     let sys = MockSys::default();
     //     let socket = Socket::new(sys.as_sys());
     //     let fd = socket.open_local_dgram()?;
@@ -141,7 +141,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_socket_open_local_dgram_err() -> io::Result<()> {
+    // fn test_socket_open_local_dgram_err() -> Result<()> {
     //     let mut sys = MockSys::default();
     //     // Set the error code to -1
     //     sys.set_last_os_error(ErrorCode::last_os_error());
@@ -169,7 +169,7 @@ mod tests {
     }
 
     // #[test]
-    // fn test_local_dgram_socket_get_lladdr_err() -> io::Result<()> {
+    // fn test_local_dgram_socket_get_lladdr_err() -> Result<()> {
     //     let mut sys = MockSys::default();
     //     // Set the error code to -1
     //     sys.set_last_os_error(ErrorCode::last_os_error());
@@ -201,7 +201,7 @@ mod tests {
     }
 
     // #[test]
-    // fn test_local_dgram_socket_set_lladdr_err() -> io::Result<()> {
+    // fn test_local_dgram_socket_set_lladdr_err() -> Result<()> {
     //     let mut sys = MockSys::default();
     //     // Set the error code to -1
     //     sys.set_last_os_error(ErrorCode::last_os_error());
