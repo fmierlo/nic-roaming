@@ -1,5 +1,9 @@
 use std::{error::Error, result};
 
+mod lladdr;
+
+pub use lladdr::*;
+
 pub type Result<T> = result::Result<T, Box<dyn Error>>;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
