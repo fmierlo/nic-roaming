@@ -2,43 +2,45 @@ use core::fmt;
 use std::{error::Error, num::ParseIntError, result::Result, str::FromStr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseLLAddrError {
+pub struct ParseLinkLevelAddressError {
     pub source: String,
     pub token: String,
     pub error: ParseIntError,
 }
 
-impl fmt::Display for ParseLLAddrError {
+impl fmt::Display for ParseLinkLevelAddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Failed to parse `{}` as LLAddr, token `{}` error: {}",
+            "Failed to parse `{}` as LinkLevelAddr, token `{}` error: {}",
             self.source, self.token, self.error
         )
     }
 }
 
-impl Error for ParseLLAddrError {
+impl Error for ParseLinkLevelAddressError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(&self.error)
     }
 }
 
+pub type LLAddr = LinkLevelAddress;
+
 #[derive(Copy, Clone, PartialEq, Eq)]
-pub struct LLAddr {
+pub struct LinkLevelAddress {
     octets: [u8; 6],
 }
 
-impl From<[u8; 6]> for LLAddr {
-    fn from(octets: [u8; 6]) -> LLAddr {
-        LLAddr { octets }
+impl From<[u8; 6]> for LinkLevelAddress {
+    fn from(octets: [u8; 6]) -> LinkLevelAddress {
+        LinkLevelAddress { octets }
     }
 }
 
-fn from_str_radix_16(source: &str, token: &str) -> Result<u8, ParseLLAddrError> {
+fn from_str_radix_16(source: &str, token: &str) -> Result<u8, ParseLinkLevelAddressError> {
     match u8::from_str_radix(token, 16) {
         Ok(value) => Ok(value),
-        Err(error) => Err(ParseLLAddrError {
+        Err(error) => Err(ParseLinkLevelAddressError {
             source: source.to_string(),
             token: token.to_string(),
             error,
@@ -46,8 +48,8 @@ fn from_str_radix_16(source: &str, token: &str) -> Result<u8, ParseLLAddrError> 
     }
 }
 
-impl FromStr for LLAddr {
-    type Err = ParseLLAddrError;
+impl FromStr for LinkLevelAddress {
+    type Err = ParseLinkLevelAddressError;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         let source = source
@@ -62,7 +64,7 @@ impl FromStr for LLAddr {
     }
 }
 
-impl fmt::Display for LLAddr {
+impl fmt::Display for LinkLevelAddress {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let octets = self.octets;
 
@@ -74,7 +76,7 @@ impl fmt::Display for LLAddr {
     }
 }
 
-impl fmt::Debug for LLAddr {
+impl fmt::Debug for LinkLevelAddress {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, fmt)
     }
