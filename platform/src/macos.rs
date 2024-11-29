@@ -1,4 +1,6 @@
 mod ifreq;
-pub mod nic;
+mod nic;
 mod socket;
 mod sys;
+
+pub use nic::*;

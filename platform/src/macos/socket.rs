@@ -164,7 +164,10 @@ mod tests {
             .open_local_dgram()?
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
         // Then
-        assert_eq!(ifreq::get_mac_address(&ifreq), expected_mac_address);
+        assert_eq!(
+            ifreq::get_mac_address(&ifreq).unwrap(),
+            expected_mac_address
+        );
         Ok(())
     }
 
@@ -289,7 +292,7 @@ pub(crate) mod mock {
         fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let ifreq = ifreq::from_mut_ptr(arg);
             let name = ifreq::get_name(ifreq)?;
-            let mac_address = ifreq::get_mac_address(ifreq);
+            let mac_address = ifreq::get_mac_address(ifreq)?;
 
             eprintln!("MockOpenSocket.set_lladdr({name}, {mac_address})");
             self.kv.borrow_mut().insert(name, mac_address);

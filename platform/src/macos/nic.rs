@@ -19,7 +19,7 @@ impl Nic {
             .open_local_dgram()?
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
 
-        Ok(ifreq::get_mac_address(&ifreq))
+        ifreq::get_mac_address(&ifreq)
     }
 
     pub fn set_mac_address(&self, name: &str, mac_address: &str) -> Result<()> {
@@ -29,16 +29,14 @@ impl Nic {
 
         self.socket
             .open_local_dgram()?
-            .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
-
-        Ok(())
+            .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use crate::{macos::socket::mock::MockSocket, nic::Nic, Result};
+    use crate::{macos::socket::mock::MockSocket, Nic, Result};
 
     use super::BoxSocket;
 

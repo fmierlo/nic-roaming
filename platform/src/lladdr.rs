@@ -1,26 +1,25 @@
 use core::fmt;
-use std::{error::Error, num::ParseIntError, result::Result, str::FromStr};
+use std::{error::Error, result::Result, str::FromStr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseLinkLevelAddressError {
     pub source: String,
-    pub token: String,
-    pub error: ParseIntError,
+    pub error: String,
 }
 
 impl fmt::Display for ParseLinkLevelAddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Failed to parse `{}` as LinkLevelAddr, token `{}` error: {}",
-            self.source, self.token, self.error
+            "Failed to parse `{}` as LinkLevelAddr, {}",
+            self.source, self.error
         )
     }
 }
 
 impl Error for ParseLinkLevelAddressError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.error)
+        None
     }
 }
 
@@ -31,9 +30,21 @@ pub struct LinkLevelAddress {
     octets: [u8; 6],
 }
 
-impl From<[u8; 6]> for LinkLevelAddress {
-    fn from(octets: [u8; 6]) -> LinkLevelAddress {
-        LinkLevelAddress { octets }
+impl LinkLevelAddress {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.octets.as_ptr()
+    }
+
+    pub fn octets(&self) -> &[u8; 6] {
+        &self.octets
+    }
+}
+
+impl From<&[u8; 6]> for LinkLevelAddress {
+    fn from(octets: &[u8; 6]) -> LinkLevelAddress {
+        LinkLevelAddress {
+            octets: octets.clone(),
+        }
     }
 }
 
@@ -42,8 +53,7 @@ fn from_str_radix_16(source: &str, token: &str) -> Result<u8, ParseLinkLevelAddr
         Ok(value) => Ok(value),
         Err(error) => Err(ParseLinkLevelAddressError {
             source: source.to_string(),
-            token: token.to_string(),
-            error,
+            error: format!("token `{}` error: {}", token, error),
         }),
     }
 }
@@ -52,15 +62,27 @@ impl FromStr for LinkLevelAddress {
     type Err = ParseLinkLevelAddressError;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {
-        let source = source
-            .splitn(6, ':')
+        let mut octets = [0u8; 6];
+
+        let tokens = source
+            .splitn(octets.len(), ':')
             .map(|token| from_str_radix_16(source, token))
             .collect::<Result<Vec<u8>, Self::Err>>()?;
 
-        let mut octets = [0u8; 6];
-        octets.copy_from_slice(&source);
+        if tokens.len() != octets.len() {
+            return Err(ParseLinkLevelAddressError {
+                source: source.to_string(),
+                error: format!(
+                    "source tokens length ({}) does not match LinkLevelAddress length ({})",
+                    tokens.len(),
+                    octets.len()
+                ),
+            });
+        }
 
-        Ok(Self::from(octets))
+        octets.copy_from_slice(&tokens);
+
+        Ok(Self::from(&octets))
     }
 }
 
@@ -70,7 +92,7 @@ impl fmt::Display for LinkLevelAddress {
 
         write!(
             fmt,
-            "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
             octets[0], octets[1], octets[2], octets[3], octets[4], octets[5]
         )
     }

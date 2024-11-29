@@ -135,12 +135,17 @@ pub(crate) mod mock {
                         -1
                     }
                 },
-                SIOCSIFLLADDR => {
-                    let mac_address = ifreq::get_mac_address(ifreq);
-                    eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, mac_address={mac_address}) -> true");
-                    self.kv.borrow_mut().insert(name, mac_address);
-                    0
-                }
+                SIOCSIFLLADDR => match ifreq::get_mac_address(ifreq) {
+                    Ok(mac_address) => {
+                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, mac_address={mac_address}) -> true");
+                        self.kv.borrow_mut().insert(name, mac_address);
+                        0
+                    }
+                    Err(err) => {
+                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, mac_address=none) -> err={err}");
+                        -1
+                    }
+                },
                 request => {
                     eprintln!("ERROR: MockSys.ioctl(fd={fd}, request={request}, name={name}) -> err='Invalid request value'");
                     -1
