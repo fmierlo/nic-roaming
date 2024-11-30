@@ -73,7 +73,10 @@ pub(crate) mod mock {
     use libc::{c_int, c_ulong, c_void};
     use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
-    use crate::macos::ifreq::{self};
+    use crate::{
+        macos::ifreq::{self},
+        LinkLevelAddress,
+    };
 
     use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
@@ -85,16 +88,16 @@ pub(crate) mod mock {
     }
 
     impl MockSys {
-        pub(crate) fn with_nic(self, name: &str, mac_address: &str) -> Self {
+        pub(crate) fn with_nic(self, name: &str, lladd: &str) -> Self {
             self.kv
                 .borrow_mut()
-                .insert(name.to_string(), mac_address.to_string());
+                .insert(name.to_string(), lladd.to_string());
             self
         }
 
-        pub(crate) fn has_nic(&self, name: &str, expected_mac_address: &str) -> bool {
+        pub(crate) fn has_nic(&self, name: &str, expected_lladd: &str) -> bool {
             match self.kv.borrow().get(name) {
-                Some(mac_address) => mac_address == expected_mac_address,
+                Some(lladd) => lladd == expected_lladd,
                 None => false,
             }
         }
@@ -120,9 +123,18 @@ pub(crate) mod mock {
 
             match request {
                 SIOCGIFLLADDR => match self.kv.borrow().get(&name) {
-                    Some(mac_address) => {
-                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> mac_address={mac_address}");
-                        match ifreq::set_mac_address(ifreq, &mac_address) {
+                    Some(lladd) => {
+                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> lladd={lladd}");
+
+                        let lladdr = match lladd.parse::<LinkLevelAddress>() {
+                            Ok(lladdr) => lladdr,
+                            Err(err) => {
+                                eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> err={err}");
+                                return -1
+                            }
+                        };
+
+                        match ifreq::set_lladdr(ifreq, lladdr) {
                             Ok(_) => 0,
                             Err(err) => {
                                 eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> err={err}");
@@ -131,18 +143,18 @@ pub(crate) mod mock {
                         }
                     }
                     None => {
-                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> mac_address=none");
+                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> lladd=none");
                         -1
                     }
                 },
-                SIOCSIFLLADDR => match ifreq::get_mac_address(ifreq) {
-                    Ok(mac_address) => {
-                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, mac_address={mac_address}) -> true");
-                        self.kv.borrow_mut().insert(name, mac_address);
+                SIOCSIFLLADDR => match ifreq::get_lladdr(ifreq) {
+                    Ok(lladd) => {
+                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, lladd={lladd}) -> true");
+                        self.kv.borrow_mut().insert(name, lladd.to_string());
                         0
                     }
                     Err(err) => {
-                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, mac_address=none) -> err={err}");
+                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, lladd=none) -> err={err}");
                         -1
                     }
                 },

@@ -2,7 +2,7 @@ use std::{ffi::CString, ptr};
 
 use libc::{c_void, ifreq};
 
-use crate::{LLAddr, Result};
+use crate::{LinkLevelAddress, Result};
 
 pub(crate) fn new() -> ifreq {
     unsafe { std::mem::zeroed() }
@@ -38,9 +38,7 @@ pub(crate) fn get_name(ifreq: &ifreq) -> Result<String> {
     Ok(String::from(name))
 }
 
-pub(crate) fn set_mac_address(ifreq: &mut ifreq, lladdr: &str) -> Result<()> {
-    let lladdr: LLAddr = lladdr.parse()?;
-
+pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: LinkLevelAddress) -> Result<()> {
     unsafe {
         ptr::copy_nonoverlapping(
             lladdr.as_ptr(),
@@ -52,8 +50,8 @@ pub(crate) fn set_mac_address(ifreq: &mut ifreq, lladdr: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn get_mac_address(ifreq: &ifreq) -> Result<String> {
+pub(crate) fn get_lladdr(ifreq: &ifreq) -> Result<LinkLevelAddress> {
     let sa_data = unsafe { &*(&ifreq.ifr_ifru.ifru_addr.sa_data as *const _ as *const [u8; 6]) };
-    Ok(LLAddr::from(sa_data).to_string())
+    Ok(LinkLevelAddress::from(sa_data))
 }
 

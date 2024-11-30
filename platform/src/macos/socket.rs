@@ -155,8 +155,8 @@ mod tests {
     fn test_local_dgram_socket_get_lladdr() -> Result<()> {
         // Given
         let name = "en";
-        let expected_mac_address = "00:11:22:33:44:55";
-        let sys = MockSys::default().with_nic(name, expected_mac_address);
+        let expected_lladd = "00:11:22:33:44:55";
+        let sys = MockSys::default().with_nic(name, expected_lladd);
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &name)?;
         // When
@@ -165,8 +165,8 @@ mod tests {
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
         // Then
         assert_eq!(
-            ifreq::get_mac_address(&ifreq).unwrap(),
-            expected_mac_address
+            ifreq::get_lladdr(&ifreq).unwrap().to_string(),
+            expected_lladd
         );
         Ok(())
     }
@@ -189,17 +189,17 @@ mod tests {
     fn test_local_dgram_socket_set_lladdr() -> Result<()> {
         // Given
         let name = "en";
-        let mac_address = "00:11:22:33:44:55";
+        let lladd = "00:11:22:33:44:55";
         let sys = MockSys::default();
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &name)?;
-        ifreq::set_mac_address(&mut ifreq, mac_address)?;
+        ifreq::set_lladdr(&mut ifreq, lladd.parse()?)?;
         // When
         LibcSocket::new(&sys)
             .open_local_dgram()?
             .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
         // Then
-        assert!(sys.has_nic(&name, &mac_address));
+        assert!(sys.has_nic(&name, &lladd));
         Ok(())
     }
 
@@ -246,20 +246,20 @@ pub(crate) mod mock {
     }
 
     impl MockSocket {
-        pub(crate) fn with_nic(self, name: &str, mac_address: &str) -> Self {
-            self.set_nic(name, mac_address);
+        pub(crate) fn with_nic(self, name: &str, lladd: &str) -> Self {
+            self.set_nic(name, lladd);
             self
         }
 
-        pub(crate) fn set_nic(&self, name: &str, mac_address: &str) {
+        pub(crate) fn set_nic(&self, name: &str, lladd: &str) {
             self.kv
                 .borrow_mut()
-                .insert(name.to_string(), mac_address.to_string());
+                .insert(name.to_string(), lladd.to_string());
         }
 
-        pub(crate) fn has_nic(&self, name: &str, expected_mac_address: &str) -> bool {
+        pub(crate) fn has_nic(&self, name: &str, expected_lladd: &str) -> bool {
             match self.kv.borrow().get(name) {
-                Some(mac_address) => mac_address == expected_mac_address,
+                Some(lladd) => lladd == expected_lladd,
                 None => false,
             }
         }
@@ -281,9 +281,9 @@ pub(crate) mod mock {
             let ifreq = ifreq::from_mut_ptr(arg);
             let name = ifreq::get_name(ifreq)?;
 
-            if let Some(mac_address) = self.kv.borrow().get(&name) {
-                eprintln!("MockOpenSocket.get_lladdr({name}) -> {mac_address})");
-                ifreq::set_mac_address(ifreq, &mac_address)?
+            if let Some(lladd) = self.kv.borrow().get(&name) {
+                eprintln!("MockOpenSocket.get_lladdr({name}) -> {lladd})");
+                ifreq::set_lladdr(ifreq, lladd.parse()?)?
             };
 
             Ok(())
@@ -292,10 +292,10 @@ pub(crate) mod mock {
         fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let ifreq = ifreq::from_mut_ptr(arg);
             let name = ifreq::get_name(ifreq)?;
-            let mac_address = ifreq::get_mac_address(ifreq)?;
+            let lladd = ifreq::get_lladdr(ifreq)?;
 
-            eprintln!("MockOpenSocket.set_lladdr({name}, {mac_address})");
-            self.kv.borrow_mut().insert(name, mac_address);
+            eprintln!("MockOpenSocket.set_lladdr({name}, {lladd})");
+            self.kv.borrow_mut().insert(name, lladd.to_string());
 
             Ok(())
         }

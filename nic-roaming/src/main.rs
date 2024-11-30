@@ -7,9 +7,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(name) => {
             let nic = Nic::default();
 
-            let mac_address = nic.get_mac_address(&name)?;
+            let lladd = nic.get_lladd(&name)?;
 
-            eprintln!("Nic.get_mac_address({name}) -> {mac_address}");
+            eprintln!("Nic.get_lladd({name}) -> {lladd}");
+
             Ok(())
         }
         None => Err("Missing param: name".into()),
