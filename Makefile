@@ -6,7 +6,7 @@ export RUST_BACKTRACE=1
 TARPAULIN_FLAGS := --output-dir target/tarpaulin --out Stdout --out Html
 
 run:
-	cargo run $(name)
+	cargo run $(if)
 
 clean:
 	rm -rf target
