@@ -52,13 +52,13 @@ mod tests {
     fn test_get_lladd() -> Result<()> {
         // Given
         let name = "en";
-        let expected_lladd = "00:11:22:33:44:55";
+        let expected_lladd: LLAddr = "00:11:22:33:44:55".parse()?;
 
-        let socket = MockSocket::default().with_nic(name, expected_lladd);
+        let socket = MockSocket::default().with_nic(name, &expected_lladd);
         // When
         let lladd = Nic::new(&socket).get_lladd(&name)?;
         // Then
-        assert_eq!(lladd.to_string(), expected_lladd);
+        assert_eq!(lladd, expected_lladd);
 
         Ok(())
     }

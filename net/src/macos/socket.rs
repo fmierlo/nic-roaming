@@ -246,12 +246,12 @@ pub(crate) mod mock {
     }
 
     impl MockSocket {
-        pub(crate) fn with_nic(self, name: &str, lladd: &str) -> Self {
+        pub(crate) fn with_nic(self, name: &str, lladd: &LinkLevelAddress) -> Self {
             self.set_nic(name, lladd);
             self
         }
 
-        pub(crate) fn set_nic(&self, name: &str, lladd: &str) {
+        pub(crate) fn set_nic(&self, name: &str, lladd: &LinkLevelAddress) {
             self.kv
                 .borrow_mut()
                 .insert(name.to_string(), lladd.to_string());
