@@ -22,7 +22,7 @@ impl Nic {
         ifreq::get_lladdr(&ifreq)
     }
 
-    pub fn set_lladd(&self, name: &str, lladdr: LinkLevelAddress) -> Result<()> {
+    pub fn set_lladd(&self, name: &str, lladdr: &LinkLevelAddress) -> Result<()> {
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &name)?;
         ifreq::set_lladdr(&mut ifreq, lladdr)?;
@@ -36,7 +36,7 @@ impl Nic {
 #[cfg(test)]
 mod tests {
 
-    use crate::{macos::socket::mock::MockSocket, Nic, Result};
+    use crate::{macos::socket::mock::MockSocket, LLAddr, Nic, Result};
 
     use super::BoxSocket;
 
@@ -67,11 +67,11 @@ mod tests {
     fn test_set_lladd() -> Result<()> {
         // Given
         let name = "en";
-        let lladd = "00:11:22:33:44:55";
+        let lladd: LLAddr = "00:11:22:33:44:55".parse()?;
 
         let socket = MockSocket::default();
         // When
-        Nic::new(&socket).set_lladd(&name, lladd.parse()?)?;
+        Nic::new(&socket).set_lladd(&name, &lladd)?;
         // Then
         assert!(socket.has_nic(&name, &lladd));
         Ok(())

@@ -134,7 +134,7 @@ pub(crate) mod mock {
                             }
                         };
 
-                        match ifreq::set_lladdr(ifreq, lladdr) {
+                        match ifreq::set_lladdr(ifreq, &lladdr) {
                             Ok(_) => 0,
                             Err(err) => {
                                 eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> err={err}");

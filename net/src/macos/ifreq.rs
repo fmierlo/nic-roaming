@@ -33,7 +33,7 @@ pub(crate) fn get_name(ifreq: &ifreq) -> Result<String> {
     Ok(String::from(name))
 }
 
-pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: LinkLevelAddress) -> Result<()> {
+pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: &LinkLevelAddress) -> Result<()> {
     unsafe {
         ptr::copy_nonoverlapping(
             lladdr.as_ptr(),

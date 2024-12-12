@@ -112,7 +112,7 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::macos::ifreq::{self};
+    use crate::{macos::ifreq::{self}, LLAddr};
 
     use super::*;
 
@@ -193,7 +193,8 @@ mod tests {
         let sys = MockSys::default();
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &name)?;
-        ifreq::set_lladdr(&mut ifreq, lladd.parse()?)?;
+        let lladdr: LLAddr = lladd.parse()?;
+        ifreq::set_lladdr(&mut ifreq, &lladdr)?;
         // When
         LibcSocket::new(&sys)
             .open_local_dgram()?
@@ -231,8 +232,7 @@ mod tests {
 #[cfg(test)]
 pub(crate) mod mock {
     use crate::{
-        macos::ifreq::{self},
-        Result,
+        macos::ifreq::{self}, LLAddr, LinkLevelAddress, Result
     };
 
     use super::{OpenSocket, Socket};
@@ -257,9 +257,9 @@ pub(crate) mod mock {
                 .insert(name.to_string(), lladd.to_string());
         }
 
-        pub(crate) fn has_nic(&self, name: &str, expected_lladd: &str) -> bool {
+        pub(crate) fn has_nic(&self, name: &str, expected_lladd: &LinkLevelAddress) -> bool {
             match self.kv.borrow().get(name) {
-                Some(lladd) => lladd == expected_lladd,
+                Some(lladd) => lladd == &expected_lladd.to_string(),
                 None => false,
             }
         }
@@ -283,7 +283,8 @@ pub(crate) mod mock {
 
             if let Some(lladd) = self.kv.borrow().get(&name) {
                 eprintln!("MockOpenSocket.get_lladdr({name}) -> {lladd})");
-                ifreq::set_lladdr(ifreq, lladd.parse()?)?
+                let lladdr: LLAddr = lladd.parse()?;
+                ifreq::set_lladdr(ifreq, &lladdr)?
             };
 
             Ok(())
