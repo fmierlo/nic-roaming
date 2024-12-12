@@ -43,7 +43,7 @@ pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: LinkLevelAddress) -> Result<
         ptr::copy_nonoverlapping(
             lladdr.as_ptr(),
             ifreq.ifr_ifru.ifru_addr.sa_data.as_mut_ptr() as *mut u8,
-            lladdr.octets().len(),
+            lladdr.len(),
         );
     }
 
