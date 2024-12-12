@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{error::Error, result::Result, str::FromStr};
+use std::{error::Error, ops::Deref, result::Result, str::FromStr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseLinkLevelAddressError {
@@ -17,11 +17,7 @@ impl fmt::Display for ParseLinkLevelAddressError {
     }
 }
 
-impl Error for ParseLinkLevelAddressError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
+impl Error for ParseLinkLevelAddressError {}
 
 pub type LLAddr = LinkLevelAddress;
 
@@ -30,24 +26,20 @@ pub struct LinkLevelAddress {
     octets: [u8; 6],
 }
 
-impl LinkLevelAddress {
-    pub fn len(&self) -> usize {
-        self.octets.len()
-    }
+impl Deref for LinkLevelAddress {
+    type Target = [u8; 6];
 
-    pub fn as_ptr(&self) -> *const u8 {
-        self.octets.as_ptr()
+    fn deref(&self) -> &Self::Target {
+        &self.octets
     }
 }
 
 impl fmt::Display for LinkLevelAddress {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let octets = self.octets;
-
         write!(
             fmt,
             "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            octets[0], octets[1], octets[2], octets[3], octets[4], octets[5]
+            self[0], self[1], self[2], self[3], self[4], self[5]
         )
     }
 }
@@ -261,16 +253,6 @@ mod tests {
             format!("{}", error),
             "Failed to parse `source` as LinkLevelAddr, error"
         );
-    }
-
-    #[test]
-    fn test_link_level_address_from_str_source_always_is_none() {
-        let error = ParseLinkLevelAddressError {
-            source: "source".to_string(),
-            error: "error".to_string(),
-        };
-
-        assert!(error.source().is_none());
     }
 
     #[test]
