@@ -1,4 +1,4 @@
-use crate::{LinkLevelAddress, Result};
+use crate::{IfName, LinkLevelAddress, Result};
 
 use super::{
     ifreq::{self},
@@ -11,21 +11,21 @@ pub struct Nic {
 }
 
 impl Nic {
-    pub fn get_lladd(&self, name: &str) -> Result<LinkLevelAddress> {
+    pub fn get_lladd(&self, ifname: &IfName) -> Result<LinkLevelAddress> {
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &name)?;
+        ifreq::set_name(&mut ifreq, ifname);
 
         self.socket
             .open_local_dgram()?
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
 
-        ifreq::get_lladdr(&ifreq)
+        Ok(ifreq::get_lladdr(&ifreq))
     }
 
-    pub fn set_lladd(&self, name: &str, lladdr: &LinkLevelAddress) -> Result<()> {
+    pub fn set_lladd(&self, ifname: &IfName, lladdr: &LinkLevelAddress) -> Result<()> {
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &name)?;
-        ifreq::set_lladdr(&mut ifreq, lladdr)?;
+        ifreq::set_name(&mut ifreq, ifname);
+        ifreq::set_lladdr(&mut ifreq, lladdr);
 
         self.socket
             .open_local_dgram()?
@@ -36,7 +36,7 @@ impl Nic {
 #[cfg(test)]
 mod tests {
 
-    use crate::{macos::socket::mock::MockSocket, LLAddr, Nic, Result};
+    use crate::{macos::socket::mock::MockSocket, IfName, LLAddr, Nic, Result};
 
     use super::BoxSocket;
 
@@ -51,14 +51,14 @@ mod tests {
     #[test]
     fn test_get_lladd() -> Result<()> {
         // Given
-        let name = "en";
-        let expected_lladd: LLAddr = "00:11:22:33:44:55".parse()?;
+        let ifname: IfName = "en".try_into()?;
+        let expected_lladdr: LLAddr = "00:11:22:33:44:55".parse()?;
 
-        let socket = MockSocket::default().with_nic(name, &expected_lladd);
+        let socket = MockSocket::default().with_nic(ifname, expected_lladdr);
         // When
-        let lladd = Nic::new(&socket).get_lladd(&name)?;
+        let lladdr = Nic::new(&socket).get_lladd(&ifname)?;
         // Then
-        assert_eq!(lladd, expected_lladd);
+        assert_eq!(lladdr, expected_lladdr);
 
         Ok(())
     }
@@ -66,14 +66,14 @@ mod tests {
     #[test]
     fn test_set_lladd() -> Result<()> {
         // Given
-        let name = "en";
-        let lladd: LLAddr = "00:11:22:33:44:55".parse()?;
+        let ifname: IfName = "en".try_into()?;
+        let lladdr: LLAddr = "00:11:22:33:44:55".parse()?;
 
         let socket = MockSocket::default();
         // When
-        Nic::new(&socket).set_lladd(&name, &lladd)?;
+        Nic::new(&socket).set_lladd(&ifname, &lladdr)?;
         // Then
-        assert!(socket.has_nic(&name, &lladd));
+        assert!(socket.has_nic(&ifname, &lladdr));
         Ok(())
     }
 }

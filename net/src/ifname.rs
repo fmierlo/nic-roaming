@@ -53,9 +53,9 @@ impl Display for IfNameError {
 
 impl Error for IfNameError {}
 
-#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct IfName {
-    name: IfNameType,
+    ifname: IfNameType,
 }
 
 impl IfName {
@@ -68,13 +68,25 @@ impl Deref for IfName {
     type Target = IfNameType;
 
     fn deref(&self) -> &Self::Target {
-        &self.name
+        &self.ifname
     }
 }
 
 impl DerefMut for IfName {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.name
+        &mut self.ifname
+    }
+}
+
+impl Display for IfName {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::ffi::CStr;
+        let ifname = unsafe { CStr::from_ptr(self.as_ptr()) };
+        let ifname = match ifname.to_str() {
+            Ok(ifname) => ifname,
+            Err(_) => "error",
+        };
+        write!(fmt, "{}", ifname)
     }
 }
 

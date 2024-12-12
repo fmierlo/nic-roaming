@@ -2,7 +2,7 @@ use std::ptr;
 
 use libc::{c_void, ifreq};
 
-use crate::{IfName, LinkLevelAddress, Result};
+use crate::{IfName, LinkLevelAddress};
 
 pub(crate) fn new() -> ifreq {
     unsafe { std::mem::zeroed() }
@@ -17,23 +17,29 @@ pub(crate) fn from_mut_ptr<'a>(arg: *mut c_void) -> &'a mut ifreq {
     unsafe { &mut *(arg as *mut _ as *mut ifreq) }
 }
 
-pub(crate) fn set_name(ifreq: &mut ifreq, name: &str) -> Result<()> {
-    let ifname = IfName::try_from(name)?;
+pub(crate) fn set_name(ifreq: &mut ifreq, ifname: &IfName) {
     unsafe {
         ptr::copy_nonoverlapping(ifname.as_ptr(), ifreq.ifr_name.as_mut_ptr(), ifname.len());
     }
-    Ok(())
 }
 
 #[cfg(test)]
-pub(crate) fn get_name(ifreq: &ifreq) -> Result<String> {
+pub(crate) fn get_name(ifreq: &ifreq) -> IfName {
     use std::ffi::CStr;
-    let name = unsafe { CStr::from_ptr(ifreq.ifr_name.as_ptr()) };
-    let name = name.to_str()?;
-    Ok(String::from(name))
+
+    let ifname = unsafe { CStr::from_ptr(ifreq.ifr_name.as_ptr()) };
+    let ifname = match ifname.to_str() {
+        Ok(ifname) => ifname,
+        Err(_) => "error",
+    };
+    let ifname = match ifname.try_into() {
+        Ok(ifname) => ifname,
+        Err(_) => IfName::new(),
+    };
+    ifname
 }
 
-pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: &LinkLevelAddress) -> Result<()> {
+pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: &LinkLevelAddress) {
     unsafe {
         ptr::copy_nonoverlapping(
             lladdr.as_ptr(),
@@ -41,10 +47,9 @@ pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: &LinkLevelAddress) -> Result
             lladdr.len(),
         );
     }
-    Ok(())
 }
 
-pub(crate) fn get_lladdr(ifreq: &ifreq) -> Result<LinkLevelAddress> {
+pub(crate) fn get_lladdr(ifreq: &ifreq) -> LinkLevelAddress {
     let sa_data = unsafe { &*(&ifreq.ifr_ifru.ifru_addr.sa_data as *const _ as *const [u8; 6]) };
-    Ok(LinkLevelAddress::from(sa_data))
+    LinkLevelAddress::from(sa_data)
 }

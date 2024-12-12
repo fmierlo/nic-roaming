@@ -75,12 +75,12 @@ pub(crate) mod mock {
 
     use crate::{
         macos::ifreq::{self},
-        LinkLevelAddress,
+        IfName, LinkLevelAddress,
     };
 
     use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
-    type KeyValue = RefCell<HashMap<String, String>>;
+    type KeyValue = RefCell<HashMap<IfName, LinkLevelAddress>>;
 
     #[derive(Clone, Debug, Default)]
     pub(crate) struct MockSys {
@@ -88,16 +88,14 @@ pub(crate) mod mock {
     }
 
     impl MockSys {
-        pub(crate) fn with_nic(self, name: &str, lladd: &str) -> Self {
-            self.kv
-                .borrow_mut()
-                .insert(name.to_string(), lladd.to_string());
+        pub(crate) fn with_nic(self, ifname: IfName, lladdr: LinkLevelAddress) -> Self {
+            self.kv.borrow_mut().insert(ifname, lladdr);
             self
         }
 
-        pub(crate) fn has_nic(&self, name: &str, expected_lladd: &str) -> bool {
-            match self.kv.borrow().get(name) {
-                Some(lladd) => lladd == expected_lladd,
+        pub(crate) fn has_nic(&self, ifname: &IfName, expected_lladdr: &LinkLevelAddress) -> bool {
+            match self.kv.borrow().get(ifname) {
+                Some(lladdr) => lladdr == expected_lladdr,
                 None => false,
             }
         }
@@ -111,55 +109,28 @@ pub(crate) mod mock {
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
             let ifreq = ifreq::from_mut_ptr(arg);
-            let name = match ifreq::get_name(ifreq) {
-                Ok(name) => name,
-                Err(err) => {
-                    eprintln!(
-                        "ERROR: MockSys.ioctl(fd={fd}, request={request}, name=none) -> err={err}"
-                    );
-                    return -1;
-                }
-            };
+            let ifname = ifreq::get_name(ifreq);
 
             match request {
-                SIOCGIFLLADDR => match self.kv.borrow().get(&name) {
-                    Some(lladd) => {
-                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> lladd={lladd}");
-
-                        let lladdr = match lladd.parse::<LinkLevelAddress>() {
-                            Ok(lladdr) => lladdr,
-                            Err(err) => {
-                                eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> err={err}");
-                                return -1
-                            }
-                        };
-
-                        match ifreq::set_lladdr(ifreq, &lladdr) {
-                            Ok(_) => 0,
-                            Err(err) => {
-                                eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> err={err}");
-                                -1
-                            }
-                        }
-                    }
-                    None => {
-                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, name={name}) -> lladd=none");
-                        -1
-                    }
-                },
-                SIOCSIFLLADDR => match ifreq::get_lladdr(ifreq) {
-                    Ok(lladd) => {
-                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, lladd={lladd}) -> true");
-                        self.kv.borrow_mut().insert(name, lladd.to_string());
+                SIOCGIFLLADDR => match self.kv.borrow().get(&ifname) {
+                    Some(lladdr) => {
+                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, ifname={ifname}) -> lladd={lladdr}");
+                        ifreq::set_lladdr(ifreq, lladdr);
                         0
                     }
-                    Err(err) => {
-                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, name={name}, lladd=none) -> err={err}");
+                    None => {
+                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, ifname={ifname}) -> lladd=none");
                         -1
                     }
                 },
+                SIOCSIFLLADDR => {
+                    let lladdr = ifreq::get_lladdr(ifreq);
+                    eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, ifname={ifname}, lladd={lladdr}) -> true");
+                    self.kv.borrow_mut().insert(ifname, lladdr);
+                    0
+                }
                 request => {
-                    eprintln!("ERROR: MockSys.ioctl(fd={fd}, request={request}, name={name}) -> err='Invalid request value'");
+                    eprintln!("ERROR: MockSys.ioctl(fd={fd}, request={request}, ifname={ifname}) -> err='Invalid request value'");
                     -1
                 }
             }

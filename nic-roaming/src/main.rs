@@ -1,18 +1,19 @@
 use std::error::Error;
 
-use net::Nic;
+use net::{IfName, Nic};
 
 fn main() -> Result<(), Box<dyn Error>> {
     match std::env::args().nth(1) {
-        Some(name) => {
+        Some(ifname) => {
             let nic = Nic::default();
 
-            let lladd = nic.get_lladd(&name)?;
+            let ifname: IfName = ifname.as_str().try_into()?;
+            let lladdr = nic.get_lladd(&ifname)?;
 
-            eprintln!("Nic.get_lladd({name}) -> {lladd}");
+            eprintln!("Nic.get_lladd({ifname}) -> {lladdr}");
 
             Ok(())
         }
-        None => Err("Missing param: name".into()),
+        None => Err("Missing param: ifname".into()),
     }
 }
