@@ -32,7 +32,6 @@ pub(crate) fn set_name(ifreq: &mut ifreq, name: &str) -> Result<()> {
 #[cfg(test)]
 pub(crate) fn get_name(ifreq: &ifreq) -> Result<String> {
     use std::ffi::CStr;
-
     let name = unsafe { CStr::from_ptr(ifreq.ifr_name.as_ptr()) };
     let name = name.to_str()?;
     Ok(String::from(name))
@@ -46,7 +45,6 @@ pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: LinkLevelAddress) -> Result<
             lladdr.len(),
         );
     }
-
     Ok(())
 }
 
@@ -54,4 +52,3 @@ pub(crate) fn get_lladdr(ifreq: &ifreq) -> Result<LinkLevelAddress> {
     let sa_data = unsafe { &*(&ifreq.ifr_ifru.ifru_addr.sa_data as *const _ as *const [u8; 6]) };
     Ok(LinkLevelAddress::from(sa_data))
 }
-

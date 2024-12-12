@@ -1,7 +1,9 @@
 use std::{error::Error, result};
 
+mod ifname;
 mod lladdr;
 
+pub use ifname::*;
 pub use lladdr::*;
 
 pub type Result<T> = result::Result<T, Box<dyn Error>>;
