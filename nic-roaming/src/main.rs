@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use platform::Nic;
+use net::Nic;
 
 fn main() -> Result<(), Box<dyn Error>> {
     match std::env::args().nth(1) {

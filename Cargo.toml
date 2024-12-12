@@ -3,5 +3,5 @@
 resolver = "2"
 members = [
     "nic-roaming",
-    "platform",
+    "net",
 ]
