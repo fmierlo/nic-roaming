@@ -1,8 +1,8 @@
-use std::{ffi::CString, ptr};
+use std::ptr;
 
 use libc::{c_void, ifreq};
 
-use crate::{LinkLevelAddress, Result};
+use crate::{IfName, LinkLevelAddress, Result};
 
 pub(crate) fn new() -> ifreq {
     unsafe { std::mem::zeroed() }
@@ -18,13 +18,9 @@ pub(crate) fn from_mut_ptr<'a>(arg: *mut c_void) -> &'a mut ifreq {
 }
 
 pub(crate) fn set_name(ifreq: &mut ifreq, name: &str) -> Result<()> {
-    let name = CString::new(name)?;
+    let ifname = IfName::try_from(name)?;
     unsafe {
-        ptr::copy_nonoverlapping(
-            name.as_ptr(),
-            ifreq.ifr_name.as_mut_ptr(),
-            name.as_bytes().len(),
-        );
+        ptr::copy_nonoverlapping(ifname.as_ptr(), ifreq.ifr_name.as_mut_ptr(), ifname.len());
     }
     Ok(())
 }
