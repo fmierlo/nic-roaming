@@ -90,7 +90,7 @@ impl TryFrom<&str> for IfName {
 
     fn try_from(value: &str) -> std::result::Result<IfName, IfNameError> {
         let value = match value.len() {
-            len if len < 1 => return Err(ErrorKind::TooSmall(value).into()),
+            len if len < IF_NAME_MIN => return Err(ErrorKind::TooSmall(value).into()),
             len if len > IF_NAME_MAX => return Err(ErrorKind::TooLarge(value).into()),
             _ => CString::new(value).map_err(|error| ErrorKind::NulError(value, error))?,
         };
