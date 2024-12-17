@@ -89,15 +89,11 @@ impl TryFrom<&str> for IfName {
     type Error = IfNameError;
 
     fn try_from(value: &str) -> std::result::Result<IfName, IfNameError> {
-        if value.len() == 0 {
-            return Err(IfNameError::too_small(value));
-        }
-
-        if value.len() > IF_NAME_SIZE {
-            return Err(IfNameError::too_large(value));
-        }
-
-        let value = CString::new(value).map_err(|error| IfNameError::null_error(value, error))?;
+        let value = match value.len() {
+            len if len < 1 => return Err(IfNameError::too_small(value)),
+            len if len > IF_NAME_SIZE => return Err(IfNameError::too_large(value)),
+            _ => CString::new(value).map_err(|error| IfNameError::null_error(value, error))?,
+        };
 
         let mut ifname = IfName::new();
 
