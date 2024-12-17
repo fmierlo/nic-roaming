@@ -59,7 +59,7 @@ pub struct IfName {
 }
 
 impl IfName {
-    pub fn new() -> Self {
+    fn new() -> Self {
         unsafe { std::mem::zeroed() }
     }
 }

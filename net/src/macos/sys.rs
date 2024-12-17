@@ -117,7 +117,7 @@ pub(crate) mod mock {
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
             let ifreq = ifreq::from_mut_ptr(arg);
-            let ifname = ifreq::get_name(ifreq);
+            let ifname = ifreq::get_name(ifreq).unwrap();
 
             match request {
                 SIOCGIFLLADDR => match self.kv.borrow().get(&ifname) {

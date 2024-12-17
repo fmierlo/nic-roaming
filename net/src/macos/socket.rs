@@ -280,7 +280,7 @@ pub(crate) mod mock {
     impl<'a> OpenSocket for MockOpenSocket<'a> {
         fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let ifreq = ifreq::from_mut_ptr(arg);
-            let ifname: IfName = ifreq::get_name(ifreq);
+            let ifname: IfName = ifreq::get_name(ifreq)?;
 
             if let Some(lladdr) = self.kv.borrow().get(&ifname) {
                 eprintln!("MockOpenSocket.get_lladdr({ifname}) -> {lladdr})");
@@ -291,7 +291,7 @@ pub(crate) mod mock {
 
         fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let ifreq = ifreq::from_mut_ptr(arg);
-            let ifname = ifreq::get_name(ifreq);
+            let ifname = ifreq::get_name(ifreq)?;
             let lladdr = ifreq::get_lladdr(ifreq);
 
             eprintln!("MockOpenSocket.set_lladdr({ifname}, {lladdr})");
