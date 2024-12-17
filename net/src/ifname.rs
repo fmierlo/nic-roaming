@@ -6,48 +6,48 @@ use std::{
     ptr,
 };
 
-const IF_NAME_SIZE: libc::size_t = libc::IFNAMSIZ;
+const IF_NAME_MIN: libc::size_t = 1;
+const IF_NAME_MAX: libc::size_t = libc::IFNAMSIZ;
 
-type IfNameType = [libc::c_char; IF_NAME_SIZE];
+type IfNameType = [libc::c_char; IF_NAME_MAX];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IfNameError {
-    error: String,
+pub enum ErrorKind<'a> {
+    TooSmall(&'a str),
+    TooLarge(&'a str),
+    NulError(&'a str, NulError),
 }
 
-impl IfNameError {
-    fn too_small(value: &str) -> IfNameError {
-        Self {
-            error: format!(
-                "value `{}` with length ({}) is too small to fit in IfName length ({})",
-                value,
-                value.len(),
-                IF_NAME_SIZE
-            ),
+impl<'a> Display for ErrorKind<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorKind::TooSmall(value) => {
+                let len = value.len();
+                write!(f, "`{value}` len {len} is too small, min {IF_NAME_MIN}")
+            }
+            ErrorKind::TooLarge(value) => {
+                let len = value.len();
+                write!(f, "`{value}` len {len} is too large, max {IF_NAME_MAX}")
+            }
+            ErrorKind::NulError(value, error) => {
+                write!(f, "error converting value `{value}` to CString: {error}")
+            }
         }
     }
+}
 
-    fn too_large(value: &str) -> IfNameError {
-        Self {
-            error: format!(
-                "value `{}` with length ({}) is too large to fit in IfName length ({})",
-                value,
-                value.len(),
-                IF_NAME_SIZE
-            ),
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IfNameError(String);
 
-    fn null_error(value: &str, error: NulError) -> IfNameError {
-        Self {
-            error: format!("error converting value `{}` to CString: {}", value, error),
-        }
+impl<'a> From<ErrorKind<'a>> for IfNameError {
+    fn from(value: ErrorKind) -> Self {
+        Self(value.to_string())
     }
 }
 
 impl Display for IfNameError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failure converting to IfName, {}", self.error)
+        write!(f, "Failure converting to IfName, {}", self.0)
     }
 }
 
@@ -90,9 +90,9 @@ impl TryFrom<&str> for IfName {
 
     fn try_from(value: &str) -> std::result::Result<IfName, IfNameError> {
         let value = match value.len() {
-            len if len < 1 => return Err(IfNameError::too_small(value)),
-            len if len > IF_NAME_SIZE => return Err(IfNameError::too_large(value)),
-            _ => CString::new(value).map_err(|error| IfNameError::null_error(value, error))?,
+            len if len < 1 => return Err(ErrorKind::TooSmall(value).into()),
+            len if len > IF_NAME_MAX => return Err(ErrorKind::TooLarge(value).into()),
+            _ => CString::new(value).map_err(|error| ErrorKind::NulError(value, error))?,
         };
 
         let mut ifname = IfName::new();
