@@ -1,9 +1,8 @@
 use std::fmt::Debug;
 
-use std::io::{self};
 use std::ops::Deref;
 
-use crate::Result;
+use crate::{str_from_ptr_or_empty, Result};
 
 use super::sys::{self, BoxSys};
 
@@ -44,8 +43,9 @@ impl<'a> Socket for LibcSocket {
         match self.socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
             fd if fd >= 0 => Ok(Box::new(LibcOpenSocket { fd, sys: &self })),
             ret => Err(format!(
-                "LibcSocket.socket(AF_LOCAL, SOCK_DGRAM, 0) -> ret={ret} err={}",
-                io::Error::last_os_error()
+                "LibcSocket.socket(AF_LOCAL, SOCK_DGRAM, 0) -> ret={ret} errno={} err={}",
+                self.errno(),
+                str_from_ptr_or_empty(self.strerror())
             )
             .into()),
         }
@@ -75,9 +75,10 @@ impl<'a> OpenSocket for LibcOpenSocket<'a> {
         match self.ioctl(self.fd, sys::SIOCGIFLLADDR, arg) {
             0 => Ok(()),
             ret => Err(format!(
-                "LibcOpenSocket.ioctl(fd={}, SIOCGIFLLADDR) -> ret={ret} err={}",
+                "LibcOpenSocket.ioctl(fd={}, SIOCGIFLLADDR) -> ret={ret} errno={} err={}",
                 self.fd,
-                io::Error::last_os_error()
+                self.errno(),
+                str_from_ptr_or_empty(self.strerror())
             )
             .into()),
         }
@@ -87,9 +88,10 @@ impl<'a> OpenSocket for LibcOpenSocket<'a> {
         match self.ioctl(self.fd, sys::SIOCSIFLLADDR, arg) {
             0 => Ok(()),
             ret => Err(format!(
-                "LibcOpenSocket.ioctl(fd={}, SIOCSIFLLADDR) -> ret={ret} err={}",
+                "LibcOpenSocket.ioctl(fd={}, SIOCSIFLLADDR) -> ret={ret} errno={} err={}",
                 self.fd,
-                io::Error::last_os_error()
+                self.errno(),
+                str_from_ptr_or_empty(self.strerror())
             )
             .into()),
         }
@@ -101,9 +103,10 @@ impl<'a> Drop for LibcOpenSocket<'a> {
         match self.close(self.fd) {
             0 => (),
             ret => eprintln!(
-                "ERROR: LibcOpenSocket.close(fd={}) -> ret={ret} err={}",
+                "ERROR: LibcOpenSocket.close(fd={}) -> ret={ret} errno={} err={}",
                 self.fd,
-                io::Error::last_os_error()
+                self.errno(),
+                str_from_ptr_or_empty(self.strerror())
             )
             .into(),
         }

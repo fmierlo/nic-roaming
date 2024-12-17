@@ -25,18 +25,10 @@ pub(crate) fn set_name(ifreq: &mut ifreq, ifname: &IfName) {
 
 #[cfg(test)]
 pub(crate) fn get_name(ifreq: &ifreq) -> IfName {
-    use std::ffi::CStr;
-
-    let ifname = unsafe { CStr::from_ptr(ifreq.ifr_name.as_ptr()) };
-    let ifname = match ifname.to_str() {
-        Ok(ifname) => ifname,
-        Err(_) => "error",
-    };
-    let ifname = match ifname.try_into() {
-        Ok(ifname) => ifname,
-        Err(_) => IfName::new(),
-    };
-    ifname
+    crate::str_from_ptr(ifreq.ifr_name.as_ptr())
+        .unwrap_or("error")
+        .try_into()
+        .unwrap_or(IfName::new())
 }
 
 pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: &LinkLevelAddress) {

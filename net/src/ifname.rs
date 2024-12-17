@@ -80,12 +80,7 @@ impl DerefMut for IfName {
 
 impl Display for IfName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use std::ffi::CStr;
-        let ifname = unsafe { CStr::from_ptr(self.as_ptr()) };
-        let ifname = match ifname.to_str() {
-            Ok(ifname) => ifname,
-            Err(_) => "error",
-        };
+        let ifname = crate::str_from_ptr(self.as_ptr()).unwrap_or("error");
         write!(fmt, "{}", ifname)
     }
 }
@@ -102,12 +97,7 @@ impl TryFrom<&str> for IfName {
             return Err(IfNameError::too_large(value));
         }
 
-        let value = match CString::new(value) {
-            Ok(value) => value,
-            Err(error) => {
-                return Err(IfNameError::null_error(value, error));
-            }
-        };
+        let value = CString::new(value).map_err(|error| IfNameError::null_error(value, error))?;
 
         let mut ifname = IfName::new();
 

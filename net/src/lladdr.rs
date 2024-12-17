@@ -57,13 +57,10 @@ impl From<&[u8; 6]> for LinkLevelAddress {
 }
 
 fn from_str_radix_16(source: &str, token: &str) -> Result<u8, ParseLinkLevelAddressError> {
-    match u8::from_str_radix(token, 16) {
-        Ok(value) => Ok(value),
-        Err(error) => Err(ParseLinkLevelAddressError {
-            source: source.to_string(),
-            error: format!("error in token `{}`: {}", token, error),
-        }),
-    }
+    u8::from_str_radix(token, 16).map_err(|error| ParseLinkLevelAddressError {
+        source: source.to_string(),
+        error: format!("error in token `{}`: {}", token, error),
+    })
 }
 
 impl FromStr for LinkLevelAddress {
