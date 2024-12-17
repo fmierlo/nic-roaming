@@ -1,19 +1,28 @@
 use std::error::Error;
 
-use net::{IfName, Nic};
+use net::{IfName, LLAddr, Nic};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    match std::env::args().nth(1) {
-        Some(ifname) => {
-            let nic = Nic::default();
+    let action = std::env::args().nth(1);
+    let ifname = std::env::args().nth(2);
+    let lladdr = std::env::args().nth(3);
 
-            let ifname: IfName = ifname.as_str().try_into()?;
-            let lladdr = nic.get_lladd(&ifname)?;
-
+    match action.ok_or("Missing action param: [get | set]")?.as_str() {
+        "get" => {
+            let ifname: IfName = ifname.ok_or("Missing ifname param")?.as_str().try_into()?;
+            let lladdr = Nic::default().get_lladd(&ifname)?;
             eprintln!("Nic.get_lladd({ifname}) -> {lladdr}");
-
-            Ok(())
         }
-        None => Err("Missing param: ifname".into()),
+        "set" => {
+            let ifname: IfName = ifname.ok_or("Missing ifname param")?.as_str().try_into()?;
+            let lladdr: LLAddr = lladdr.ok_or("Missing lladdr param")?.parse()?;
+            Nic::default().set_lladd(&ifname, &lladdr)?;
+            eprintln!("Nic.set_lladd({ifname}, {lladdr})");
+        }
+        invalid => {
+            return Err(format!("Invalid action: {invalid}").into());
+        }
     }
+
+    Ok(())
 }
