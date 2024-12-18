@@ -1,6 +1,6 @@
 use std::{fmt::Debug, ops::Deref};
 
-use libc::{c_char, c_int, c_ulong, c_void};
+use libc::{c_int, c_ulong, c_void};
 
 // /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/ioccom.h
 
@@ -28,14 +28,17 @@ pub(crate) const SIOCSIFLLADDR: c_ulong = 0x8020693c;
 // g = (0x80000000 |0x40000000) | 32 << 16 | (105 << 8) | 158
 pub(crate) const SIOCGIFLLADDR: c_ulong = 0xc020699e;
 
+pub(crate) fn strerror(n: c_int) -> String {
+    let ptr = unsafe { libc::strerror(n) };
+    let c_str = unsafe { std::ffi::CStr::from_ptr(ptr) };
+    c_str.to_bytes().escape_ascii().to_string()
+}
+
 pub(crate) trait Sys: Debug {
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int;
     fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int;
     fn close(&self, fd: c_int) -> c_int;
     fn errno(&self) -> c_int;
-    fn strerror(&self) -> *mut c_char {
-        unsafe { libc::strerror(self.errno()) }
-    }
 }
 
 #[derive(Debug, Default)]

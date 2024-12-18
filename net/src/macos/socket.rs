@@ -1,10 +1,80 @@
-use std::fmt::Debug;
+use std::error::Error;
+use std::fmt::{Debug, Display};
 
 use std::ops::Deref;
 
-use crate::{str_from_ptr_or_empty, Result};
+use crate::Result;
 
 use super::sys::{self, BoxSys};
+
+#[derive(Clone, PartialEq, Eq)]
+struct OpenError<'a> {
+    name: &'a str,
+    ret: libc::c_int,
+    errno: libc::c_int,
+}
+
+impl<'a> Error for OpenError<'a> {}
+
+impl<'a> OpenError<'a> {
+    fn new(name: &'a str, ret: libc::c_int, errno: libc::c_int) -> Self {
+        Self { name, ret, errno }
+    }
+}
+
+impl<'a> Debug for OpenError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(self.name)
+            .field("ret", &self.ret)
+            .field("errno", &self.errno)
+            .field("strerror", &sys::strerror(self.errno))
+            .finish()
+    }
+}
+
+impl<'a> Display for OpenError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct FdError<'a> {
+    name: &'a str,
+    fd: libc::c_int,
+    ret: libc::c_int,
+    errno: libc::c_int,
+}
+
+impl<'a> Error for FdError<'a> {}
+
+impl<'a> FdError<'a> {
+    fn new(name: &'a str, fd: libc::c_int, ret: libc::c_int, errno: libc::c_int) -> Self {
+        Self {
+            name,
+            fd,
+            ret,
+            errno,
+        }
+    }
+}
+
+impl<'a> Debug for FdError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(&self.name)
+            .field("fd", &self.fd)
+            .field("ret", &self.ret)
+            .field("errno", &self.errno)
+            .field("strerror", &sys::strerror(self.errno))
+            .finish()
+    }
+}
+
+impl<'a> Display for FdError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 pub(crate) trait Socket: Debug {
     fn open_local_dgram(&self) -> Result<Box<dyn OpenSocket + '_>>;
@@ -42,12 +112,7 @@ impl<'a> Socket for LibcSocket {
     fn open_local_dgram(&self) -> Result<Box<dyn OpenSocket + '_>> {
         match self.socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
             fd if fd >= 0 => Ok(Box::new(LibcOpenSocket { fd, sys: &self })),
-            ret => Err(format!(
-                "LibcSocket.socket(AF_LOCAL, SOCK_DGRAM, 0) -> ret={ret} errno={} err={}",
-                self.errno(),
-                str_from_ptr_or_empty(self.strerror())
-            )
-            .into()),
+            ret => Err(OpenError::new("Socket::OpenLocalDgramError", ret, self.errno()).into()),
         }
     }
 }
@@ -74,41 +139,28 @@ impl<'a> OpenSocket for LibcOpenSocket<'a> {
     fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
         match self.ioctl(self.fd, sys::SIOCGIFLLADDR, arg) {
             0 => Ok(()),
-            ret => Err(format!(
-                "LibcOpenSocket.ioctl(fd={}, SIOCGIFLLADDR) -> ret={ret} errno={} err={}",
-                self.fd,
-                self.errno(),
-                str_from_ptr_or_empty(self.strerror())
-            )
-            .into()),
+            ret => Err(FdError::new("Socket::GetLLAddrError", self.fd, ret, self.errno()).into()),
         }
     }
 
     fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
         match self.ioctl(self.fd, sys::SIOCSIFLLADDR, arg) {
             0 => Ok(()),
-            ret => Err(format!(
-                "LibcOpenSocket.ioctl(fd={}, SIOCSIFLLADDR) -> ret={ret} errno={} err={}",
-                self.fd,
-                self.errno(),
-                str_from_ptr_or_empty(self.strerror())
-            )
-            .into()),
+            ret => Err(FdError::new("Socket::SetLLAddrError", self.fd, ret, self.errno()).into()),
         }
     }
 }
 
 impl<'a> Drop for LibcOpenSocket<'a> {
     fn drop(&mut self) {
-        match self.close(self.fd) {
-            0 => (),
-            ret => eprintln!(
-                "ERROR: LibcOpenSocket.close(fd={}) -> ret={ret} errno={} err={}",
-                self.fd,
-                self.errno(),
-                str_from_ptr_or_empty(self.strerror())
-            )
-            .into(),
+        let fd = self.fd;
+        let result = match self.close(fd) {
+            0 => Ok(()),
+            ret => Err(FdError::new("Socket::CloseError", fd, ret, self.errno())),
+        };
+
+        if let Err(error) = result {
+            eprintln!("Error: {:?}", error);
         }
     }
 }
