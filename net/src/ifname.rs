@@ -80,8 +80,14 @@ impl DerefMut for IfName {
 
 impl Display for IfName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ifname = crate::str_from_ptr(self.as_ptr()).unwrap_or("error");
-        write!(fmt, "{}", ifname)
+        let c_str = unsafe { std::ffi::CStr::from_ptr(self.as_ptr()) };
+        write!(fmt, "{}", c_str.to_bytes().escape_ascii().to_string())
+    }
+}
+
+impl From<IfNameType> for IfName {
+    fn from(value: IfNameType) -> Self {
+        Self { ifname: value }
     }
 }
 

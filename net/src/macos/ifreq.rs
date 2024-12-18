@@ -24,13 +24,8 @@ pub(crate) fn set_name(ifreq: &mut ifreq, ifname: &IfName) {
 }
 
 #[cfg(test)]
-use crate::IfNameError;
-
-#[cfg(test)]
-pub(crate) fn get_name(ifreq: &ifreq) -> Result<IfName, IfNameError> {
-    crate::str_from_ptr(ifreq.ifr_name.as_ptr())
-        .unwrap_or("error")
-        .try_into()
+pub(crate) fn get_name(ifreq: &ifreq) -> IfName {
+    IfName::from(ifreq.ifr_name)
 }
 
 pub(crate) fn set_lladdr(ifreq: &mut ifreq, lladdr: &LinkLevelAddress) {
