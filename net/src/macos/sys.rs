@@ -28,8 +28,8 @@ pub(crate) const SIOCSIFLLADDR: c_ulong = 0x8020693c;
 // g = (0x80000000 |0x40000000) | 32 << 16 | (105 << 8) | 158
 pub(crate) const SIOCGIFLLADDR: c_ulong = 0xc020699e;
 
-pub(crate) fn strerror(n: c_int) -> String {
-    let ptr = unsafe { libc::strerror(n) };
+pub(crate) fn strerror(errno: c_int) -> String {
+    let ptr = unsafe { libc::strerror(errno) };
     let c_str = unsafe { std::ffi::CStr::from_ptr(ptr) };
     c_str.to_bytes().escape_ascii().to_string()
 }

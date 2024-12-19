@@ -12,7 +12,6 @@ pub(crate) fn as_mut_ptr(ifreq: &mut ifreq) -> *mut c_void {
     ifreq as *const _ as *mut c_void
 }
 
-#[cfg(test)]
 pub(crate) fn from_mut_ptr<'a>(arg: *mut c_void) -> &'a mut ifreq {
     unsafe { &mut *(arg as *mut _ as *mut ifreq) }
 }
@@ -23,7 +22,6 @@ pub(crate) fn set_name(ifreq: &mut ifreq, ifname: &IfName) {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn get_name(ifreq: &ifreq) -> IfName {
     IfName::from(ifreq.ifr_name)
 }

@@ -1,76 +1,67 @@
-use std::error::Error;
 use std::fmt::{Debug, Display};
 
 use std::ops::Deref;
 
-use crate::Result;
+use crate::macos::ifreq::{self};
+
+use crate::{IfName, LinkLevelAddress, Result};
 
 use super::sys::{self, BoxSys};
 
 #[derive(Clone, PartialEq, Eq)]
-struct OpenError<'a> {
-    name: &'a str,
-    ret: libc::c_int,
-    errno: libc::c_int,
+enum Error {
+    OpenLocalDgram(libc::c_int, libc::c_int),
+    GetLLAddr(libc::c_int, IfName, libc::c_int, libc::c_int),
+    SetLLAddr(
+        libc::c_int,
+        IfName,
+        LinkLevelAddress,
+        libc::c_int,
+        libc::c_int,
+    ),
+    Close(libc::c_int, libc::c_int, libc::c_int),
 }
 
-impl<'a> Error for OpenError<'a> {}
+impl std::error::Error for Error {}
 
-impl<'a> OpenError<'a> {
-    fn new(name: &'a str, ret: libc::c_int, errno: libc::c_int) -> Self {
-        Self { name, ret, errno }
-    }
-}
-
-impl<'a> Debug for OpenError<'a> {
+impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct(self.name)
-            .field("ret", &self.ret)
-            .field("errno", &self.errno)
-            .field("strerror", &sys::strerror(self.errno))
-            .finish()
-    }
-}
-
-impl<'a> Display for OpenError<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Clone, PartialEq, Eq)]
-struct FdError<'a> {
-    name: &'a str,
-    fd: libc::c_int,
-    ret: libc::c_int,
-    errno: libc::c_int,
-}
-
-impl<'a> Error for FdError<'a> {}
-
-impl<'a> FdError<'a> {
-    fn new(name: &'a str, fd: libc::c_int, ret: libc::c_int, errno: libc::c_int) -> Self {
-        Self {
-            name,
-            fd,
-            ret,
-            errno,
+        match self {
+            Error::OpenLocalDgram(ret, errno) => f
+                .debug_struct("Socket::OpenLocalDgramError")
+                .field("ret", ret)
+                .field("errno", errno)
+                .field("strerror", &sys::strerror(*errno))
+                .finish(),
+            Error::GetLLAddr(fd, ifname, ret, errno) => f
+                .debug_struct("Socket::GetLLAddrError")
+                .field("fd", fd)
+                .field("ifname", ifname)
+                .field("ret", ret)
+                .field("errno", errno)
+                .field("strerror", &sys::strerror(*errno))
+                .finish(),
+            Error::SetLLAddr(fd, ifname, lladdr, ret, errno) => f
+                .debug_struct("Socket::SetLLAddrError")
+                .field("fd", fd)
+                .field("ifname", ifname)
+                .field("lladdr", lladdr)
+                .field("ret", ret)
+                .field("errno", errno)
+                .field("strerror", &sys::strerror(*errno))
+                .finish(),
+            Error::Close(fd, ret, errno) => f
+                .debug_struct("Socket::CloseError")
+                .field("fd", fd)
+                .field("ret", ret)
+                .field("errno", errno)
+                .field("strerror", &sys::strerror(*errno))
+                .finish(),
         }
     }
 }
 
-impl<'a> Debug for FdError<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct(&self.name)
-            .field("fd", &self.fd)
-            .field("ret", &self.ret)
-            .field("errno", &self.errno)
-            .field("strerror", &sys::strerror(self.errno))
-            .finish()
-    }
-}
-
-impl<'a> Display for FdError<'a> {
+impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -112,7 +103,10 @@ impl<'a> Socket for LibcSocket {
     fn open_local_dgram(&self) -> Result<Box<dyn OpenSocket + '_>> {
         match self.socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
             fd if fd >= 0 => Ok(Box::new(LibcOpenSocket { fd, sys: &self })),
-            ret => Err(OpenError::new("Socket::OpenLocalDgramError", ret, self.errno()).into()),
+            ret => {
+                let errno = self.errno();
+                Err(Error::OpenLocalDgram(ret, errno).into())
+            }
         }
     }
 }
@@ -137,16 +131,29 @@ impl<'a> Deref for LibcOpenSocket<'a> {
 
 impl<'a> OpenSocket for LibcOpenSocket<'a> {
     fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
-        match self.ioctl(self.fd, sys::SIOCGIFLLADDR, arg) {
+        let fd = self.fd;
+        match self.ioctl(fd, sys::SIOCGIFLLADDR, arg) {
             0 => Ok(()),
-            ret => Err(FdError::new("Socket::GetLLAddrError", self.fd, ret, self.errno()).into()),
+            ret => {
+                let ifreq = ifreq::from_mut_ptr(arg);
+                let ifname = ifreq::get_name(ifreq);
+                let errno = self.errno();
+                Err(Error::GetLLAddr(fd, ifname, ret, errno).into())
+            }
         }
     }
 
     fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
-        match self.ioctl(self.fd, sys::SIOCSIFLLADDR, arg) {
+        let fd = self.fd;
+        match self.ioctl(fd, sys::SIOCSIFLLADDR, arg) {
             0 => Ok(()),
-            ret => Err(FdError::new("Socket::SetLLAddrError", self.fd, ret, self.errno()).into()),
+            ret => {
+                let ifreq = ifreq::from_mut_ptr(arg);
+                let ifname = ifreq::get_name(ifreq);
+                let lladdr = ifreq::get_lladdr(ifreq);
+                let errno = self.errno();
+                Err(Error::SetLLAddr(fd, ifname, lladdr, ret, errno).into())
+            }
         }
     }
 }
@@ -156,7 +163,10 @@ impl<'a> Drop for LibcOpenSocket<'a> {
         let fd = self.fd;
         let result = match self.close(fd) {
             0 => Ok(()),
-            ret => Err(FdError::new("Socket::CloseError", fd, ret, self.errno())),
+            ret => {
+                let errno = self.errno();
+                Err(Error::Close(fd, ret, errno))
+            }
         };
 
         if let Err(error) = result {
@@ -167,10 +177,7 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        macos::ifreq::{self},
-        IfName, LLAddr,
-    };
+    use crate::{IfName, LLAddr};
 
     use super::*;
 

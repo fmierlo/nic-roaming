@@ -1,5 +1,5 @@
-use core::fmt;
-use std::{error::Error, ops::Deref, result::Result, str::FromStr};
+use core::fmt::{self, Debug, Display};
+use std::{ops::Deref, result::Result, str::FromStr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseLinkLevelAddressError {
@@ -7,7 +7,7 @@ pub struct ParseLinkLevelAddressError {
     pub error: String,
 }
 
-impl fmt::Display for ParseLinkLevelAddressError {
+impl Display for ParseLinkLevelAddressError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -17,7 +17,7 @@ impl fmt::Display for ParseLinkLevelAddressError {
     }
 }
 
-impl Error for ParseLinkLevelAddressError {}
+impl std::error::Error for ParseLinkLevelAddressError {}
 
 pub type LLAddr = LinkLevelAddress;
 
@@ -34,19 +34,24 @@ impl Deref for LinkLevelAddress {
     }
 }
 
-impl fmt::Display for LinkLevelAddress {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            fmt,
-            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            self[0], self[1], self[2], self[3], self[4], self[5]
-        )
+impl Debug for LinkLevelAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", String::from(self))
     }
 }
 
-impl fmt::Debug for LinkLevelAddress {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, fmt)
+impl Display for LinkLevelAddress {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(fmt, "{}", String::from(self))
+    }
+}
+
+impl From<&LinkLevelAddress> for String {
+    fn from(value: &LinkLevelAddress) -> Self {
+        format!(
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            value[0], value[1], value[2], value[3], value[4], value[5]
+        )
     }
 }
 
@@ -218,7 +223,7 @@ mod tests {
     #[test]
     fn test_link_level_address_debug() {
         let addr = LinkLevelAddress { octets: OCTETS };
-        assert_eq!(format!("{:?}", addr), "01:02:03:04:05:06");
+        assert_eq!(format!("{:?}", addr), "\"01:02:03:04:05:06\"");
     }
 
     #[test]

@@ -1,10 +1,6 @@
-use std::{
-    error::Error,
-    ffi::{CString, NulError},
-    fmt::Display,
-    ops::{Deref, DerefMut},
-    ptr,
-};
+use core::fmt::{Debug, Display};
+use std::ffi::{CString, NulError};
+use std::{ops::Deref, ops::DerefMut, ptr};
 
 const IF_NAME_MIN: libc::size_t = 1;
 const IF_NAME_MAX: libc::size_t = libc::IFNAMSIZ;
@@ -51,9 +47,9 @@ impl Display for IfNameError {
     }
 }
 
-impl Error for IfNameError {}
+impl std::error::Error for IfNameError {}
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct IfName {
     ifname: IfNameType,
 }
@@ -78,10 +74,22 @@ impl DerefMut for IfName {
     }
 }
 
+impl Debug for IfName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", String::from(self))
+    }
+}
+
 impl Display for IfName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let c_str = unsafe { std::ffi::CStr::from_ptr(self.as_ptr()) };
-        write!(fmt, "{}", c_str.to_bytes().escape_ascii().to_string())
+        write!(fmt, "{}", String::from(self))
+    }
+}
+
+impl From<&IfName> for String {
+    fn from(value: &IfName) -> Self {
+        let c_str = unsafe { std::ffi::CStr::from_ptr(value.as_ptr()) };
+        c_str.to_bytes().escape_ascii().to_string()
     }
 }
 
