@@ -9,12 +9,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match action.ok_or("Missing action param: [get | set]")?.as_str() {
         "get" => {
-            let ifname: IfName = ifname.ok_or("Missing ifname param")?.as_str().try_into()?;
+            let ifname: IfName = ifname.ok_or("Missing ifname param")?.try_into()?;
             let lladdr = Nic::default().get_lladd(&ifname)?;
             eprintln!("Nic.get_lladd({ifname}) -> {lladdr}");
         }
         "set" => {
-            let ifname: IfName = ifname.ok_or("Missing ifname param")?.as_str().try_into()?;
+            let ifname: IfName = ifname.ok_or("Missing ifname param")?.try_into()?;
             let lladdr: LLAddr = lladdr.ok_or("Missing lladdr param")?.parse()?;
             Nic::default().set_lladd(&ifname, &lladdr)?;
             eprintln!("Nic.set_lladd({ifname}, {lladdr})");

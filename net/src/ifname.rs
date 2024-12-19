@@ -7,52 +7,47 @@ const IF_NAME_MAX: libc::size_t = libc::IFNAMSIZ;
 
 type IfNameType = [libc::c_char; IF_NAME_MAX];
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ErrorKind<'a> {
-    TooSmall(&'a str),
-    TooLarge(&'a str),
-    NulError(&'a str, NulError),
+#[derive(Clone, PartialEq, Eq)]
+enum Error {
+    TooSmall(String),
+    TooLarge(String),
+    Nul(String, NulError),
 }
 
-impl<'a> Display for ErrorKind<'a> {
+impl std::error::Error for Error {}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorKind::TooSmall(value) => {
-                let len = value.len();
-                write!(f, "`{value}` len {len} is too small, min {IF_NAME_MIN}")
-            }
-            ErrorKind::TooLarge(value) => {
-                let len = value.len();
-                write!(f, "`{value}` len {len} is too large, max {IF_NAME_MAX}")
-            }
-            ErrorKind::NulError(value, error) => {
-                write!(f, "error converting value `{value}` to CString: {error}")
-            }
+            Self::TooSmall(value) => f
+                .debug_struct("IfName::TooSmallError")
+                .field("value", value)
+                .field("len", &value.len())
+                .field("min", &IF_NAME_MIN)
+                .finish(),
+            Self::TooLarge(value) => f
+                .debug_struct("IfName::TooLargeError")
+                .field("value", value)
+                .field("len", &value.len())
+                .field("max", &IF_NAME_MAX)
+                .finish(),
+            Self::Nul(value, error) => f
+                .debug_struct("IfName::NulError")
+                .field("value", value)
+                .field("error", error)
+                .finish(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IfNameError(String);
-
-impl<'a> From<ErrorKind<'a>> for IfNameError {
-    fn from(value: ErrorKind) -> Self {
-        Self(value.to_string())
-    }
-}
-
-impl Display for IfNameError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failure converting to IfName, {}", self.0)
-    }
-}
-
-impl std::error::Error for IfNameError {}
-
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
-pub struct IfName {
-    ifname: IfNameType,
-}
+pub struct IfName(IfNameType);
 
 impl IfName {
     fn new() -> Self {
@@ -64,13 +59,13 @@ impl Deref for IfName {
     type Target = IfNameType;
 
     fn deref(&self) -> &Self::Target {
-        &self.ifname
+        &self.0
     }
 }
 
 impl DerefMut for IfName {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.ifname
+        &mut self.0
     }
 }
 
@@ -86,7 +81,7 @@ impl Display for IfName {
     }
 }
 
-impl From<&IfName> for String {
+impl<'a> From<&IfName> for String {
     fn from(value: &IfName) -> Self {
         let c_str = unsafe { std::ffi::CStr::from_ptr(value.as_ptr()) };
         c_str.to_bytes().escape_ascii().to_string()
@@ -95,18 +90,26 @@ impl From<&IfName> for String {
 
 impl From<IfNameType> for IfName {
     fn from(value: IfNameType) -> Self {
-        Self { ifname: value }
+        Self(value)
     }
 }
 
 impl TryFrom<&str> for IfName {
-    type Error = IfNameError;
+    type Error = Box<dyn std::error::Error>;
 
-    fn try_from(value: &str) -> std::result::Result<IfName, IfNameError> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        String::from(value).try_into()
+    }
+}
+
+impl TryFrom<String> for IfName {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         let value = match value.len() {
-            len if len < IF_NAME_MIN => return Err(ErrorKind::TooSmall(value).into()),
-            len if len > IF_NAME_MAX => return Err(ErrorKind::TooLarge(value).into()),
-            _ => CString::new(value).map_err(|error| ErrorKind::NulError(value, error))?,
+            len if len < IF_NAME_MIN => return Err(Error::TooSmall(value).into()),
+            len if len > IF_NAME_MAX => return Err(Error::TooLarge(value).into()),
+            _ => CString::new(value.clone()).map_err(|error| Error::Nul(value, error))?,
         };
 
         let mut ifname = IfName::new();
