@@ -269,9 +269,10 @@ mod tests {
         let source = "01:02:03";
         let expected_error = "LinkLevelAddress::WrongNumberOfOctetsError { value: \"01:02:03\", value_octets: 3, expected_octets: 6 }";
 
-        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+        let error = LinkLevelAddress::from_str(source).unwrap_err();
 
-        assert_eq!(error, expected_error);
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
     }
 
     #[test]
@@ -279,9 +280,10 @@ mod tests {
         let source = "01:02:03:04:05:06:07";
         let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"01:02:03:04:05:06:07\", octet: \"06:07\", error: \"invalid digit found in string\" }";
 
-        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+        let error = LinkLevelAddress::from_str(source).unwrap_err();
 
-        assert_eq!(error, expected_error);
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
     }
 
     #[test]
@@ -289,9 +291,10 @@ mod tests {
         let source = "";
         let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"\", octet: \"\", error: \"cannot parse integer from empty string\" }";
 
-        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+        let error = LinkLevelAddress::from_str(source).unwrap_err();
 
-        assert_eq!(error, expected_error);
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
     }
 
     #[test]
@@ -299,9 +302,10 @@ mod tests {
         let source = "01:02:300";
         let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"01:02:300\", octet: \"300\", error: \"number too large to fit in target type\" }";
 
-        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+        let error = LinkLevelAddress::from_str(source).unwrap_err();
 
-        assert_eq!(error, expected_error);
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
     }
 
     #[test]
@@ -309,8 +313,9 @@ mod tests {
         let source = "01:02:XX:04:05:06";
         let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"01:02:XX:04:05:06\", octet: \"XX\", error: \"invalid digit found in string\" }";
 
-        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+        let error = LinkLevelAddress::from_str(source).unwrap_err();
 
-        assert_eq!(error, expected_error);
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
     }
 }
