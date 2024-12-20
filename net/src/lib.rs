@@ -1,4 +1,4 @@
-use std::{error::Error, result};
+use std::result;
 
 mod ifname;
 mod lladdr;
@@ -6,7 +6,7 @@ mod lladdr;
 pub use ifname::*;
 pub use lladdr::*;
 
-pub type Result<T> = result::Result<T, Box<dyn Error>>;
+pub type Result<T> = result::Result<T, Box<dyn std::error::Error>>;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 compile_error!("Unsupported platform!");

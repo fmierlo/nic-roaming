@@ -1,36 +1,53 @@
-use core::fmt::{self, Debug, Display};
+use core::fmt::{Debug, Display};
 use std::{ops::Deref, result::Result, str::FromStr};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseLinkLevelAddressError {
-    pub source: String,
-    pub error: String,
+const OCTETS_SIZE: usize = 6;
+
+type OctetsType = [u8; OCTETS_SIZE];
+
+#[derive(Clone, PartialEq, Eq)]
+enum Error {
+    WrongNumberOfOctets(String, usize),
+    InvalidOctet(String, String, String),
 }
 
-impl Display for ParseLinkLevelAddressError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Failed to parse `{}` as LinkLevelAddr, {}",
-            self.source, self.error
-        )
+impl std::error::Error for Error {}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
-impl std::error::Error for ParseLinkLevelAddressError {}
+impl Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongNumberOfOctets(value, octets_len) => f
+                .debug_struct("LinkLevelAddress::WrongNumberOfOctetsError")
+                .field("value", value)
+                .field("value_octets", octets_len)
+                .field("expected_octets", &OCTETS_SIZE)
+                .finish(),
+            Self::InvalidOctet(value, octet, error) => f
+                .debug_struct("LinkLevelAddress::InvalidOctetError")
+                .field("value", value)
+                .field("octet", octet)
+                .field("error", error)
+                .finish(),
+        }
+    }
+}
 
 pub type LLAddr = LinkLevelAddress;
 
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
-pub struct LinkLevelAddress {
-    octets: [u8; 6],
-}
+pub struct LinkLevelAddress(OctetsType);
 
 impl Deref for LinkLevelAddress {
-    type Target = [u8; 6];
+    type Target = OctetsType;
 
     fn deref(&self) -> &Self::Target {
-        &self.octets
+        &self.0
     }
 }
 
@@ -55,44 +72,51 @@ impl From<&LinkLevelAddress> for String {
     }
 }
 
-impl From<&[u8; 6]> for LinkLevelAddress {
-    fn from(octets: &[u8; 6]) -> LinkLevelAddress {
-        LinkLevelAddress { octets: *octets }
+impl From<&OctetsType> for LinkLevelAddress {
+    fn from(octets: &OctetsType) -> LinkLevelAddress {
+        LinkLevelAddress(*octets)
     }
 }
 
-fn from_str_radix_16(source: &str, token: &str) -> Result<u8, ParseLinkLevelAddressError> {
-    u8::from_str_radix(token, 16).map_err(|error| ParseLinkLevelAddressError {
-        source: source.to_string(),
-        error: format!("error in token `{}`: {}", token, error),
-    })
+struct OctetsVec(Vec<u8>);
+
+impl Deref for OctetsVec {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<&str> for OctetsVec {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let octets = value
+            .splitn(OCTETS_SIZE, ':')
+            .map(|octet| {
+                u8::from_str_radix(octet, 16).map_err(|error| {
+                    Error::InvalidOctet(value.to_string(), octet.to_string(), error.to_string())
+                })
+            })
+            .collect::<Result<Vec<u8>, Error>>()?;
+        Ok(Self(octets))
+    }
 }
 
 impl FromStr for LinkLevelAddress {
-    type Err = ParseLinkLevelAddressError;
+    type Err = Box<dyn std::error::Error>;
 
-    fn from_str(source: &str) -> Result<Self, Self::Err> {
-        let mut octets = [0u8; 6];
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let octets = OctetsVec::try_from(value)?;
 
-        let tokens = source
-            .splitn(octets.len(), ':')
-            .map(|token| from_str_radix_16(source, token))
-            .collect::<Result<Vec<u8>, Self::Err>>()?;
-
-        if tokens.len() != octets.len() {
-            return Err(ParseLinkLevelAddressError {
-                source: source.to_string(),
-                error: format!(
-                    "source tokens length ({}) does not match LinkLevelAddress length ({})",
-                    tokens.len(),
-                    octets.len()
-                ),
-            });
+        if octets.len() != OCTETS_SIZE {
+            return Err(Error::WrongNumberOfOctets(value.to_string(), octets.len()).into());
         }
 
-        octets.copy_from_slice(&tokens);
-
-        Ok(Self::from(&octets))
+        let mut lladdr = [0u8; OCTETS_SIZE];
+        lladdr.copy_from_slice(&octets);
+        Ok(Self::from(&lladdr))
     }
 }
 
@@ -102,62 +126,60 @@ mod tests {
 
     use super::*;
 
-    const OCTETS: [u8; 6] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+    const OCTETS: OctetsType = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
 
     #[test]
     fn test_link_level_address_octet_values() {
-        let addr = LinkLevelAddress { octets: OCTETS };
-        assert_eq!(addr.octets[0], 0x01);
-        assert_eq!(addr.octets[1], 0x02);
-        assert_eq!(addr.octets[2], 0x03);
-        assert_eq!(addr.octets[3], 0x04);
-        assert_eq!(addr.octets[4], 0x05);
-        assert_eq!(addr.octets[5], 0x06);
+        let addr = LinkLevelAddress(OCTETS);
+        assert_eq!(addr[0], 0x01);
+        assert_eq!(addr[1], 0x02);
+        assert_eq!(addr[2], 0x03);
+        assert_eq!(addr[3], 0x04);
+        assert_eq!(addr[4], 0x05);
+        assert_eq!(addr[5], 0x06);
     }
 
     #[test]
     fn test_link_level_address_copy() {
-        let addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
         let copy_addr = addr;
-        assert_eq!(addr.octets[0], copy_addr.octets[0]);
-        assert_eq!(addr.octets[1], copy_addr.octets[1]);
-        assert_eq!(addr.octets[2], copy_addr.octets[2]);
-        assert_eq!(addr.octets[3], copy_addr.octets[3]);
-        assert_eq!(addr.octets[4], copy_addr.octets[4]);
-        assert_eq!(addr.octets[5], copy_addr.octets[5]);
+        assert_eq!(addr[0], copy_addr[0]);
+        assert_eq!(addr[1], copy_addr[1]);
+        assert_eq!(addr[2], copy_addr[2]);
+        assert_eq!(addr[3], copy_addr[3]);
+        assert_eq!(addr[4], copy_addr[4]);
+        assert_eq!(addr[5], copy_addr[5]);
     }
 
     #[test]
     fn test_link_level_address_clone() {
-        let addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
         let clone_addr = addr.clone();
-        assert_eq!(addr.octets[0], clone_addr.octets[0]);
-        assert_eq!(addr.octets[1], clone_addr.octets[1]);
-        assert_eq!(addr.octets[2], clone_addr.octets[2]);
-        assert_eq!(addr.octets[3], clone_addr.octets[3]);
-        assert_eq!(addr.octets[4], clone_addr.octets[4]);
-        assert_eq!(addr.octets[5], clone_addr.octets[5]);
+        assert_eq!(addr[0], clone_addr[0]);
+        assert_eq!(addr[1], clone_addr[1]);
+        assert_eq!(addr[2], clone_addr[2]);
+        assert_eq!(addr[3], clone_addr[3]);
+        assert_eq!(addr[4], clone_addr[4]);
+        assert_eq!(addr[5], clone_addr[5]);
     }
 
     #[test]
     fn test_link_level_address_partial_eq() {
-        let addr = LinkLevelAddress { octets: OCTETS };
-        let eq_addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
+        let eq_addr = LinkLevelAddress(OCTETS);
         assert_eq!(addr, eq_addr);
     }
 
     #[test]
     fn test_link_level_address_partial_ne() {
-        let addr = LinkLevelAddress { octets: OCTETS };
-        let ne_addr = LinkLevelAddress {
-            octets: [0x06, 0x05, 0x04, 0x03, 0x02, 0x01],
-        };
+        let addr = LinkLevelAddress(OCTETS);
+        let ne_addr = LinkLevelAddress([0x06, 0x05, 0x04, 0x03, 0x02, 0x01]);
         assert_ne!(addr, ne_addr);
     }
 
     #[test]
     fn test_link_level_address_eq_and_hash() {
-        let address = LinkLevelAddress { octets: OCTETS };
+        let address = LinkLevelAddress(OCTETS);
         let mut map: HashMap<LinkLevelAddress, &str> = HashMap::new();
         map.insert(address, "01:02:03:04:05:06");
 
@@ -166,70 +188,70 @@ mod tests {
 
     #[test]
     fn test_link_level_address_partial_update() {
-        let mut addr = LinkLevelAddress { octets: OCTETS };
-        addr.octets[2] = 0x30;
-        assert_eq!(addr.octets[0], 0x01);
-        assert_eq!(addr.octets[1], 0x02);
-        assert_eq!(addr.octets[2], 0x30);
-        assert_eq!(addr.octets[3], 0x04);
-        assert_eq!(addr.octets[4], 0x05);
-        assert_eq!(addr.octets[5], 0x06);
+        let mut addr = LinkLevelAddress(OCTETS);
+        addr.0[2] = 0x30;
+        assert_eq!(addr[0], 0x01);
+        assert_eq!(addr[1], 0x02);
+        assert_eq!(addr[2], 0x30);
+        assert_eq!(addr[3], 0x04);
+        assert_eq!(addr[4], 0x05);
+        assert_eq!(addr[5], 0x06);
     }
 
     #[test]
     fn test_link_level_address_fill() {
-        let mut addr = LinkLevelAddress { octets: OCTETS };
-        addr.octets.fill(0x10);
-        assert_eq!(addr.octets[0], 0x10);
-        assert_eq!(addr.octets[1], 0x10);
-        assert_eq!(addr.octets[2], 0x10);
-        assert_eq!(addr.octets[3], 0x10);
-        assert_eq!(addr.octets[4], 0x10);
-        assert_eq!(addr.octets[5], 0x10);
+        let mut addr = LinkLevelAddress(OCTETS);
+        addr.0.fill(0x10);
+        assert_eq!(addr[0], 0x10);
+        assert_eq!(addr[1], 0x10);
+        assert_eq!(addr[2], 0x10);
+        assert_eq!(addr[3], 0x10);
+        assert_eq!(addr[4], 0x10);
+        assert_eq!(addr[5], 0x10);
     }
 
     #[test]
     fn test_link_level_address_len() {
-        let addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
         assert_eq!(addr.len(), 6);
     }
 
     #[test]
     fn test_link_level_address_as_ptr() {
-        let addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
 
         let addr_ptr = addr.as_ptr();
 
         unsafe {
-            for i in 0..addr.octets.len() {
-                assert_eq!(addr.octets.get_unchecked(i), &*addr_ptr.add(i));
+            for i in 0..addr.len() {
+                assert_eq!(addr.get_unchecked(i), &*addr_ptr.add(i));
             }
         }
     }
 
     #[test]
     fn test_link_level_address_as_ptr_ne_null() {
-        let addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
 
         assert_ne!(addr.as_ptr(), std::ptr::null());
     }
 
     #[test]
     fn test_link_level_address_display() {
-        let addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
         assert_eq!(format!("{}", addr), "01:02:03:04:05:06");
     }
 
     #[test]
     fn test_link_level_address_debug() {
-        let addr = LinkLevelAddress { octets: OCTETS };
+        let addr = LinkLevelAddress(OCTETS);
         assert_eq!(format!("{:?}", addr), "\"01:02:03:04:05:06\"");
     }
 
     #[test]
     fn test_link_level_address_from_octets() {
         let source = &OCTETS;
-        let expected = LinkLevelAddress { octets: OCTETS };
+        let expected = LinkLevelAddress(OCTETS);
 
         assert_eq!(LinkLevelAddress::from(source), expected);
     }
@@ -237,79 +259,58 @@ mod tests {
     #[test]
     fn test_link_level_address_from_str() {
         let source = "00:02:03:04:ee:FF";
-        let expected = LinkLevelAddress {
-            octets: [0x00, 0x02, 0x03, 0x04, 0xEE, 0xff],
-        };
+        let expected = LinkLevelAddress([0x00, 0x02, 0x03, 0x04, 0xEE, 0xff]);
 
         assert_eq!(LinkLevelAddress::from_str(source).unwrap(), expected);
     }
 
     #[test]
-    fn test_link_level_address_from_str_format_error() {
-        let error = ParseLinkLevelAddressError {
-            source: "source".to_string(),
-            error: "error".to_string(),
-        };
-
-        assert_eq!(
-            format!("{}", error),
-            "Failed to parse `source` as LinkLevelAddr, error"
-        );
-    }
-
-    #[test]
     fn test_link_level_address_from_str_length_too_small() {
         let source = "01:02:03";
-        let error = ParseLinkLevelAddressError {
-            source: source.to_string(),
-            error: "source tokens length (3) does not match LinkLevelAddress length (6)"
-                .to_string(),
-        };
+        let expected_error = "LinkLevelAddress::WrongNumberOfOctetsError { value: \"01:02:03\", value_octets: 3, expected_octets: 6 }";
 
-        assert_eq!(LinkLevelAddress::from_str(source), Err(error));
+        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+
+        assert_eq!(error, expected_error);
     }
 
     #[test]
     fn test_link_level_address_from_str_length_too_large() {
         let source = "01:02:03:04:05:06:07";
-        let error = ParseLinkLevelAddressError {
-            source: source.to_string(),
-            error: "error in token `06:07`: invalid digit found in string".to_string(),
-        };
+        let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"01:02:03:04:05:06:07\", octet: \"06:07\", error: \"invalid digit found in string\" }";
 
-        assert_eq!(LinkLevelAddress::from_str(source), Err(error));
+        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+
+        assert_eq!(error, expected_error);
     }
 
     #[test]
     fn test_link_level_address_from_str_empty() {
         let source = "";
-        let error = ParseLinkLevelAddressError {
-            source: source.to_string(),
-            error: "error in token ``: cannot parse integer from empty string".to_string(),
-        };
+        let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"\", octet: \"\", error: \"cannot parse integer from empty string\" }";
 
-        assert_eq!(LinkLevelAddress::from_str(source), Err(error));
+        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+
+        assert_eq!(error, expected_error);
     }
 
     #[test]
     fn test_link_level_address_from_str_number_too_large() {
         let source = "01:02:300";
-        let error = ParseLinkLevelAddressError {
-            source: source.to_string(),
-            error: "error in token `300`: number too large to fit in target type".to_string(),
-        };
+        let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"01:02:300\", octet: \"300\", error: \"number too large to fit in target type\" }";
 
-        assert_eq!(LinkLevelAddress::from_str(source), Err(error));
+        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+
+        assert_eq!(error, expected_error);
     }
 
     #[test]
     fn test_link_level_address_from_str_invalid_digit() {
         let source = "01:02:XX:04:05:06";
-        let error = ParseLinkLevelAddressError {
-            source: source.to_string(),
-            error: "error in token `XX`: invalid digit found in string".to_string(),
-        };
+        let expected_error = "LinkLevelAddress::InvalidOctetError { value: \"01:02:XX:04:05:06\", octet: \"XX\", error: \"invalid digit found in string\" }";
 
-        assert_eq!(LinkLevelAddress::from_str(source), Err(error));
+        let error = LinkLevelAddress::from_str(source).unwrap_err().to_string();
+
+        assert_eq!(error, expected_error);
     }
 }

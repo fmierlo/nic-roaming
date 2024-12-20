@@ -11,8 +11,8 @@ use super::sys::{self, BoxSys};
 #[derive(Clone, PartialEq, Eq)]
 enum Error {
     OpenLocalDgram(libc::c_int, libc::c_int),
-    GetLLAddr(libc::c_int, IfName, libc::c_int, libc::c_int),
-    SetLLAddr(
+    GetLinkLevelAddress(libc::c_int, IfName, libc::c_int, libc::c_int),
+    SetLinkLevelAddress(
         libc::c_int,
         IfName,
         LinkLevelAddress,
@@ -39,16 +39,16 @@ impl Debug for Error {
                 .field("errno", errno)
                 .field("strerror", &sys::strerror(*errno))
                 .finish(),
-            Error::GetLLAddr(fd, ifname, ret, errno) => f
-                .debug_struct("Socket::GetLLAddrError")
+            Error::GetLinkLevelAddress(fd, ifname, ret, errno) => f
+                .debug_struct("Socket::GetLinkLevelAddressError")
                 .field("fd", fd)
                 .field("ifname", ifname)
                 .field("ret", ret)
                 .field("errno", errno)
                 .field("strerror", &sys::strerror(*errno))
                 .finish(),
-            Error::SetLLAddr(fd, ifname, lladdr, ret, errno) => f
-                .debug_struct("Socket::SetLLAddrError")
+            Error::SetLinkLevelAddress(fd, ifname, lladdr, ret, errno) => f
+                .debug_struct("Socket::SetLinkLevelAddressError")
                 .field("fd", fd)
                 .field("ifname", ifname)
                 .field("lladdr", lladdr)
@@ -138,7 +138,7 @@ impl<'a> OpenSocket for LibcOpenSocket<'a> {
                 let ifreq = ifreq::from_mut_ptr(arg);
                 let ifname = ifreq::get_name(ifreq);
                 let errno = self.errno();
-                Err(Error::GetLLAddr(fd, ifname, ret, errno).into())
+                Err(Error::GetLinkLevelAddress(fd, ifname, ret, errno).into())
             }
         }
     }
@@ -152,7 +152,7 @@ impl<'a> OpenSocket for LibcOpenSocket<'a> {
                 let ifname = ifreq::get_name(ifreq);
                 let lladdr = ifreq::get_lladdr(ifreq);
                 let errno = self.errno();
-                Err(Error::SetLLAddr(fd, ifname, lladdr, ret, errno).into())
+                Err(Error::SetLinkLevelAddress(fd, ifname, lladdr, ret, errno).into())
             }
         }
     }
