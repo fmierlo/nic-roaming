@@ -1,6 +1,5 @@
-use std::error::Error;
-
 use net::{IfName, LLAddr, Nic};
+use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let action = std::env::args().nth(1);

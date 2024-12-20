@@ -1,6 +1,5 @@
-use std::{fmt::Debug, ops::Deref};
-
 use libc::{c_int, c_ulong, c_void};
+use std::{fmt::Debug, ops::Deref};
 
 // /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/ioccom.h
 
@@ -22,19 +21,19 @@ use libc::{c_int, c_ulong, c_void};
 
 // #define SIOCSIFLLADDR   _IOW('i', 60, struct ifreq)     /* set link level addr */
 // s = 0x80000000 | 32 << 16 | (105 << 8) | 60
-pub(crate) const SIOCSIFLLADDR: c_ulong = 0x8020693c;
+pub(super) const SIOCSIFLLADDR: c_ulong = 0x8020693c;
 
 // #define SIOCSIFLLADDR   _IORW('i', 158, struct ifreq)     /* set link level addr */
 // g = (0x80000000 |0x40000000) | 32 << 16 | (105 << 8) | 158
-pub(crate) const SIOCGIFLLADDR: c_ulong = 0xc020699e;
+pub(super) const SIOCGIFLLADDR: c_ulong = 0xc020699e;
 
-pub(crate) fn strerror(errno: c_int) -> String {
+pub(super) fn strerror(errno: c_int) -> String {
     let ptr = unsafe { libc::strerror(errno) };
     let c_str = unsafe { std::ffi::CStr::from_ptr(ptr) };
     c_str.to_bytes().escape_ascii().to_string()
 }
 
-pub(crate) trait Sys: Debug {
+pub(super) trait Sys: Debug {
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int;
     fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int;
     fn close(&self, fd: c_int) -> c_int;
@@ -42,7 +41,7 @@ pub(crate) trait Sys: Debug {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct BoxSys(pub(crate) Box<dyn Sys>);
+pub(super) struct BoxSys(pub(super) Box<dyn Sys>);
 
 impl Default for Box<dyn Sys> {
     fn default() -> Self {
@@ -59,7 +58,7 @@ impl Deref for BoxSys {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct LibcSys {}
+pub(super) struct LibcSys {}
 
 impl Sys for LibcSys {
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
@@ -80,16 +79,12 @@ impl Sys for LibcSys {
 }
 
 #[cfg(test)]
-pub(crate) mod mock {
+pub(super) mod mock {
+    use super::super::ifreq;
+    use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
+    use crate::{IfName, LinkLevelAddress};
     use libc::{c_int, c_ulong, c_void};
     use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
-
-    use crate::{
-        macos::ifreq::{self},
-        IfName, LinkLevelAddress,
-    };
-
-    use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
     type KeyValue = RefCell<HashMap<IfName, LinkLevelAddress>>;
 

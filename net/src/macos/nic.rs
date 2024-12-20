@@ -35,10 +35,8 @@ impl Nic {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::{macos::socket::mock::MockSocket, IfName, LLAddr, Nic, Result};
-
-    use super::BoxSocket;
+    use super::{super::socket::mock::MockSocket, BoxSocket, Nic};
+    use crate::{IfName, LinkLevelAddress, Result};
 
     impl Nic {
         fn new(socket: &MockSocket) -> Nic {
@@ -52,7 +50,7 @@ mod tests {
     fn test_get_lladd() -> Result<()> {
         // Given
         let ifname: IfName = "en".try_into()?;
-        let expected_lladdr: LLAddr = "00:11:22:33:44:55".parse()?;
+        let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
 
         let socket = MockSocket::default().with_nic(ifname, expected_lladdr);
         // When
@@ -67,7 +65,7 @@ mod tests {
     fn test_set_lladd() -> Result<()> {
         // Given
         let ifname: IfName = "en".try_into()?;
-        let lladdr: LLAddr = "00:11:22:33:44:55".parse()?;
+        let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
 
         let socket = MockSocket::default();
         // When

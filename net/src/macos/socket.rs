@@ -1,12 +1,8 @@
-use std::fmt::{Debug, Display};
-
-use std::ops::Deref;
-
-use crate::macos::ifreq::{self};
-
-use crate::{IfName, LinkLevelAddress, Result};
-
+use super::ifreq::{self};
 use super::sys::{self, BoxSys};
+use crate::{IfName, LinkLevelAddress, Result};
+use std::fmt::{Debug, Display};
+use std::ops::Deref;
 
 #[derive(Clone, PartialEq, Eq)]
 enum Error {
@@ -67,12 +63,12 @@ impl Debug for Error {
     }
 }
 
-pub(crate) trait Socket: Debug {
+pub(super) trait Socket: Debug {
     fn open_local_dgram(&self) -> Result<Box<dyn OpenSocket + '_>>;
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct BoxSocket(pub(crate) Box<dyn Socket>);
+pub(super) struct BoxSocket(pub(super) Box<dyn Socket>);
 
 impl Default for Box<dyn Socket> {
     fn default() -> Self {
@@ -89,7 +85,7 @@ impl Deref for BoxSocket {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct LibcSocket(BoxSys);
+pub(super) struct LibcSocket(BoxSys);
 
 impl Deref for LibcSocket {
     type Target = BoxSys;
@@ -111,12 +107,12 @@ impl<'a> Socket for LibcSocket {
     }
 }
 
-pub(crate) trait OpenSocket {
+pub(super) trait OpenSocket {
     fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
     fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
 }
 
-pub(crate) struct LibcOpenSocket<'a> {
+pub(super) struct LibcOpenSocket<'a> {
     fd: libc::c_int,
     sys: &'a BoxSys,
 }
@@ -177,11 +173,8 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{IfName, LLAddr};
-
-    use super::*;
-
-    use sys::mock::MockSys;
+    use super::super::sys::mock::MockSys;
+    use super::{ifreq, BoxSys, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
 
     impl<'a> LibcSocket {
         fn new(sys: &MockSys) -> LibcSocket {
@@ -220,7 +213,7 @@ mod tests {
     fn test_local_dgram_socket_get_lladdr() -> Result<()> {
         // Given
         let ifname: IfName = "en".try_into()?;
-        let expected_lladdr: LLAddr = "00:11:22:33:44:55".parse()?;
+        let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
         let sys = MockSys::default().with_nic(ifname, expected_lladdr);
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &ifname);
@@ -251,7 +244,7 @@ mod tests {
     fn test_local_dgram_socket_set_lladdr() -> Result<()> {
         // Given
         let ifname: IfName = "en".try_into()?;
-        let lladdr: LLAddr = "00:11:22:33:44:55".parse()?;
+        let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
         let sys = MockSys::default();
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &ifname);
@@ -291,13 +284,10 @@ mod tests {
 }
 
 #[cfg(test)]
-pub(crate) mod mock {
-    use crate::{
-        macos::ifreq::{self},
-        IfName, LinkLevelAddress, Result,
-    };
-
+pub(super) mod mock {
+    use super::ifreq::{self};
     use super::{OpenSocket, Socket};
+    use crate::{IfName, LinkLevelAddress, Result};
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     type KeyValue = RefCell<HashMap<IfName, LinkLevelAddress>>;
@@ -332,7 +322,7 @@ pub(crate) mod mock {
         }
     }
 
-    pub(crate) struct MockOpenSocket<'a> {
+    pub(super) struct MockOpenSocket<'a> {
         kv: &'a Rc<KeyValue>,
     }
 

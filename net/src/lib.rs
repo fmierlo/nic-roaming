@@ -1,24 +1,15 @@
-use std::result;
-
-mod ifname;
-mod lladdr;
-
-pub use ifname::*;
-pub use lladdr::*;
-
-pub type Result<T> = result::Result<T, Box<dyn std::error::Error>>;
-
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 compile_error!("Unsupported platform!");
 
-#[cfg(target_os = "macos")]
-mod macos;
+mod ifname;
+mod lladdr;
+#[cfg_attr(target_os = "linux", path = "linux.rs")]
+#[cfg_attr(target_os = "macos", path = "macos.rs")]
+mod os;
 
-#[cfg(target_os = "macos")]
-pub use macos::*;
+pub use ifname::IfName;
+pub use lladdr::{LLAddr, LinkLevelAddress};
+pub use os::Nic;
+use std::result;
 
-#[cfg(target_os = "linux")]
-mod linux;
-
-#[cfg(target_os = "linux")]
-pub use linux::*;
+pub type Result<T> = result::Result<T, Box<dyn std::error::Error>>;

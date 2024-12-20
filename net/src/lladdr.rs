@@ -122,9 +122,8 @@ impl FromStr for LinkLevelAddress {
 
 #[cfg(test)]
 mod tests {
+    use super::{FromStr, LinkLevelAddress, OctetsType};
     use std::collections::HashMap;
-
-    use super::*;
 
     const OCTETS: OctetsType = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
 

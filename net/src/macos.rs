@@ -1,6 +1,8 @@
-mod ifreq;
-mod nic;
-mod socket;
-mod sys;
+mod macos {
+    mod ifreq;
+    pub mod nic;
+    mod socket;
+    mod sys;
+}
 
-pub use nic::*;
+pub use macos::nic::Nic;
