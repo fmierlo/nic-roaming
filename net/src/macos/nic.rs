@@ -1,9 +1,6 @@
+use super::ifreq::{self};
+use super::socket::BoxSocket;
 use crate::{IfName, LinkLevelAddress, Result};
-
-use super::{
-    ifreq::{self},
-    socket::BoxSocket,
-};
 
 #[derive(Debug, Default)]
 pub struct Nic {
