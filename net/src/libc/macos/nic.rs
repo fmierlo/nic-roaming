@@ -1,6 +1,7 @@
+use super::ifname::IfName;
 use super::ifreq::{self};
 use super::socket::BoxSocket;
-use crate::{IfName, LinkLevelAddress, Result};
+use crate::{LinkLevelAddress, Result};
 
 #[derive(Debug, Default)]
 pub struct Nic {
@@ -32,8 +33,8 @@ impl Nic {
 
 #[cfg(test)]
 mod tests {
-    use super::{super::socket::mock::MockSocket, BoxSocket, Nic};
-    use crate::{IfName, LinkLevelAddress, Result};
+    use super::{super::socket::mock::MockSocket, BoxSocket, IfName, Nic};
+    use crate::{LinkLevelAddress, Result};
 
     impl Nic {
         fn new(socket: &MockSocket) -> Nic {

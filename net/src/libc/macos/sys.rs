@@ -80,9 +80,9 @@ impl Sys for LibcSys {
 
 #[cfg(test)]
 pub(super) mod mock {
-    use super::super::ifreq;
+    use super::super::{ifname::IfName, ifreq};
     use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
-    use crate::{IfName, LinkLevelAddress};
+    use crate::LinkLevelAddress;
     use libc::{c_int, c_ulong, c_void};
     use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 

@@ -1,6 +1,7 @@
+use super::ifname::IfName;
 use super::ifreq::{self};
 use super::sys::{self, BoxSys};
-use crate::{IfName, LinkLevelAddress, Result};
+use crate::{LinkLevelAddress, Result};
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
@@ -286,8 +287,8 @@ mod tests {
 #[cfg(test)]
 pub(super) mod mock {
     use super::ifreq::{self};
-    use super::{OpenSocket, Socket};
-    use crate::{IfName, LinkLevelAddress, Result};
+    use super::{OpenSocket, Socket, super::ifname::IfName};
+    use crate::{LinkLevelAddress, Result};
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     type KeyValue = RefCell<HashMap<IfName, LinkLevelAddress>>;

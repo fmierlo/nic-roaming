@@ -1,4 +1,5 @@
-use crate::{IfName, LinkLevelAddress};
+use super::ifname::IfName;
+use crate::LinkLevelAddress;
 use libc::{c_void, ifreq};
 use std::ptr;
 
