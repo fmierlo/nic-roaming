@@ -1,4 +1,4 @@
-use net::{IfName, LLAddr, Nic};
+use net_sys::{IfName, LLAddr, Nic};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

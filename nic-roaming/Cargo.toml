@@ -8,4 +8,4 @@ path = "src/main.rs"
 name = "nicr"
 
 [dependencies]
-net = { path = "../net", features = ["libc"] }
+net-sys = { path = "../net-sys", features = ["libc"] }
