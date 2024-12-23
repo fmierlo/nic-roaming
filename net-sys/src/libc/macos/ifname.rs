@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_if_name_char_values() {
-        let source = &CHARS;
+        let source = CHARS;
 
         let ifname = IfName(source);
 
