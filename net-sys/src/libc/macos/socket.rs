@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn test_local_dgram_socket_get_lladdr() -> Result<()> {
         // Given
-        let ifname: IfName = "en".try_into()?;
+        let ifname: IfName = "enx".try_into()?;
         let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
         let sys = MockSys::default().with_nic(ifname, expected_lladdr);
         let mut ifreq = ifreq::new();
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn test_local_dgram_socket_set_lladdr() -> Result<()> {
         // Given
-        let ifname: IfName = "en".try_into()?;
+        let ifname: IfName = "enx".try_into()?;
         let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
         let sys = MockSys::default();
         let mut ifreq = ifreq::new();
@@ -287,7 +287,7 @@ mod tests {
 #[cfg(test)]
 pub(super) mod mock {
     use super::ifreq::{self};
-    use super::{OpenSocket, Socket, super::ifname::IfName};
+    use super::{super::ifname::IfName, OpenSocket, Socket};
     use crate::{LinkLevelAddress, Result};
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
 

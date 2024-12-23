@@ -47,7 +47,7 @@ mod tests {
     #[test]
     fn test_get_lladd() -> Result<()> {
         // Given
-        let ifname: IfName = "en".try_into()?;
+        let ifname: IfName = "enx".try_into()?;
         let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
 
         let socket = MockSocket::default().with_nic(ifname, expected_lladdr);
@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn test_set_lladd() -> Result<()> {
         // Given
-        let ifname: IfName = "en".try_into()?;
+        let ifname: IfName = "enx".try_into()?;
         let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
 
         let socket = MockSocket::default();

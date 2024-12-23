@@ -22,7 +22,7 @@ pub(super) fn set_name(ifreq: &mut ifreq, ifname: &IfName) {
 }
 
 pub(super) fn get_name(ifreq: &ifreq) -> IfName {
-    IfName::from(ifreq.ifr_name)
+    IfName::from(&ifreq.ifr_name)
 }
 
 pub(super) fn set_lladdr(ifreq: &mut ifreq, lladdr: &LinkLevelAddress) {

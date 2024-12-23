@@ -114,7 +114,7 @@ impl FromStr for LinkLevelAddress {
             return Err(Error::WrongNumberOfOctets(value.to_string(), octets.len()).into());
         }
 
-        let mut lladdr = [0u8; OCTETS_SIZE];
+        let mut lladdr: OctetsType = unsafe { std::mem::zeroed() };
         lladdr.copy_from_slice(&octets);
         Ok(Self::from(&lladdr))
     }
@@ -128,38 +128,35 @@ mod tests {
     const OCTETS: OctetsType = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
 
     #[test]
+    fn test_link_level_address_len() {
+        let addr = LinkLevelAddress(OCTETS);
+        assert_eq!(addr.len(), 6);
+    }
+
+    #[test]
     fn test_link_level_address_octet_values() {
         let addr = LinkLevelAddress(OCTETS);
-        assert_eq!(addr[0], 0x01);
-        assert_eq!(addr[1], 0x02);
-        assert_eq!(addr[2], 0x03);
-        assert_eq!(addr[3], 0x04);
-        assert_eq!(addr[4], 0x05);
-        assert_eq!(addr[5], 0x06);
+        for i in 0..addr.len() {
+            assert_eq!(addr[i], OCTETS[i]);
+        }
     }
 
     #[test]
     fn test_link_level_address_copy() {
         let addr = LinkLevelAddress(OCTETS);
         let copy_addr = addr;
-        assert_eq!(addr[0], copy_addr[0]);
-        assert_eq!(addr[1], copy_addr[1]);
-        assert_eq!(addr[2], copy_addr[2]);
-        assert_eq!(addr[3], copy_addr[3]);
-        assert_eq!(addr[4], copy_addr[4]);
-        assert_eq!(addr[5], copy_addr[5]);
+        for i in 0..addr.len() {
+            assert_eq!(addr[i], copy_addr[i]);
+        }
     }
 
     #[test]
     fn test_link_level_address_clone() {
         let addr = LinkLevelAddress(OCTETS);
         let clone_addr = addr.clone();
-        assert_eq!(addr[0], clone_addr[0]);
-        assert_eq!(addr[1], clone_addr[1]);
-        assert_eq!(addr[2], clone_addr[2]);
-        assert_eq!(addr[3], clone_addr[3]);
-        assert_eq!(addr[4], clone_addr[4]);
-        assert_eq!(addr[5], clone_addr[5]);
+        for i in 0..addr.len() {
+            assert_eq!(addr[i], clone_addr[i]);
+        }
     }
 
     #[test]
@@ -172,7 +169,7 @@ mod tests {
     #[test]
     fn test_link_level_address_partial_ne() {
         let addr = LinkLevelAddress(OCTETS);
-        let ne_addr = LinkLevelAddress([0x06, 0x05, 0x04, 0x03, 0x02, 0x01]);
+        let ne_addr = LinkLevelAddress(unsafe { std::mem::zeroed() });
         assert_ne!(addr, ne_addr);
     }
 
@@ -183,36 +180,6 @@ mod tests {
         map.insert(address, "01:02:03:04:05:06");
 
         assert_eq!(map.get(&address), Some(&"01:02:03:04:05:06"));
-    }
-
-    #[test]
-    fn test_link_level_address_partial_update() {
-        let mut addr = LinkLevelAddress(OCTETS);
-        addr.0[2] = 0x30;
-        assert_eq!(addr[0], 0x01);
-        assert_eq!(addr[1], 0x02);
-        assert_eq!(addr[2], 0x30);
-        assert_eq!(addr[3], 0x04);
-        assert_eq!(addr[4], 0x05);
-        assert_eq!(addr[5], 0x06);
-    }
-
-    #[test]
-    fn test_link_level_address_fill() {
-        let mut addr = LinkLevelAddress(OCTETS);
-        addr.0.fill(0x10);
-        assert_eq!(addr[0], 0x10);
-        assert_eq!(addr[1], 0x10);
-        assert_eq!(addr[2], 0x10);
-        assert_eq!(addr[3], 0x10);
-        assert_eq!(addr[4], 0x10);
-        assert_eq!(addr[5], 0x10);
-    }
-
-    #[test]
-    fn test_link_level_address_len() {
-        let addr = LinkLevelAddress(OCTETS);
-        assert_eq!(addr.len(), 6);
     }
 
     #[test]

@@ -1,17 +1,17 @@
 use core::fmt::{Debug, Display};
-use std::ffi::{CString, NulError};
-use std::{ops::Deref, ops::DerefMut, ptr};
+use std::{ffi::CString, ops::Deref, ptr};
 
-const IF_NAME_MIN: libc::size_t = 1;
-const IF_NAME_MAX: libc::size_t = libc::IFNAMSIZ;
+const IF_NAME_SIZE: libc::size_t = libc::IFNAMSIZ;
+const IF_NAME_MIN: libc::size_t = 3;
+const IF_NAME_MAX: libc::size_t = IF_NAME_SIZE - 1;
 
-type IfNameType = [libc::c_char; IF_NAME_MAX];
+type IfNameType = [libc::c_char; IF_NAME_SIZE];
 
 #[derive(Clone, PartialEq, Eq)]
 enum Error {
     TooSmall(String),
     TooLarge(String),
-    Nul(String, NulError),
+    InvalidCString(String, String),
 }
 
 impl std::error::Error for Error {}
@@ -37,8 +37,8 @@ impl Debug for Error {
                 .field("len", &value.len())
                 .field("max", &IF_NAME_MAX)
                 .finish(),
-            Self::Nul(value, error) => f
-                .debug_struct("IfName::NulError")
+            Self::InvalidCString(value, error) => f
+                .debug_struct("IfName::InvalidCStringError")
                 .field("value", value)
                 .field("error", error)
                 .finish(),
@@ -49,23 +49,11 @@ impl Debug for Error {
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct IfName(IfNameType);
 
-impl IfName {
-    fn new() -> Self {
-        unsafe { std::mem::zeroed() }
-    }
-}
-
 impl Deref for IfName {
     type Target = IfNameType;
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl DerefMut for IfName {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 
@@ -88,9 +76,9 @@ impl<'a> From<&IfName> for String {
     }
 }
 
-impl From<IfNameType> for IfName {
-    fn from(value: IfNameType) -> Self {
-        Self(value)
+impl From<&IfNameType> for IfName {
+    fn from(value: &IfNameType) -> Self {
+        Self(*value)
     }
 }
 
@@ -109,15 +97,200 @@ impl TryFrom<String> for IfName {
         let value = match value.len() {
             len if len < IF_NAME_MIN => return Err(Error::TooSmall(value).into()),
             len if len > IF_NAME_MAX => return Err(Error::TooLarge(value).into()),
-            _ => CString::new(value.clone()).map_err(|error| Error::Nul(value, error))?,
+            _ => CString::new(value.clone())
+                .map_err(|error| Error::InvalidCString(value, error.to_string()))?,
         };
 
-        let mut ifname = IfName::new();
-
+        let mut ifname: IfNameType = unsafe { std::mem::zeroed() };
         unsafe {
             ptr::copy_nonoverlapping(value.as_ptr(), ifname.as_mut_ptr(), value.as_bytes().len());
         }
+        Ok(Self::from(&ifname))
+    }
+}
 
-        Ok(ifname)
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::{IfName, IfNameType};
+
+    const CHARS: IfNameType = [
+        // '0'..'9' and 'A'..'F'
+        0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45,
+        0x00,
+    ];
+
+    #[test]
+    fn test_if_name_len() {
+        let ifname = IfName(CHARS);
+
+        let len = ifname.len();
+
+        assert_eq!(len, 16);
+    }
+
+    #[test]
+    fn test_if_name_char_values() {
+        let source = &CHARS;
+
+        let ifname = IfName(source);
+
+        for i in 0..ifname.len() {
+            assert_eq!(ifname[i], source[i]);
+        }
+    }
+
+    #[test]
+    fn test_if_name_copy() {
+        let ifname = IfName(CHARS);
+
+        let copy_ifname = ifname;
+
+        for i in 0..ifname.len() {
+            assert_eq!(ifname[i], copy_ifname[i]);
+        }
+    }
+
+    #[test]
+    fn test_if_name_clone() {
+        let ifname = IfName(CHARS);
+
+        let clone_ifname = ifname.clone();
+
+        for i in 0..ifname.len() {
+            assert_eq!(ifname[i], clone_ifname[i]);
+        }
+    }
+
+    #[test]
+    fn test_if_name_partial_eq() {
+        let ifname = IfName(CHARS);
+        let eq_ifname = IfName(CHARS);
+
+        assert_eq!(ifname, eq_ifname);
+    }
+
+    #[test]
+    fn test_if_name_partial_ne() {
+        let ifname = IfName(CHARS);
+        let ne_ifname = IfName(unsafe { std::mem::zeroed() });
+
+        assert_ne!(ifname, ne_ifname);
+    }
+
+    #[test]
+    fn test_if_name_eq_and_hash() {
+        let ifname = IfName(CHARS);
+        let mut map: HashMap<IfName, &str> = HashMap::new();
+
+        map.insert(ifname, "interface");
+
+        assert_eq!(map.get(&ifname), Some(&"interface"));
+    }
+
+    #[test]
+    fn test_if_name_as_ptr() {
+        let ifname = IfName(CHARS);
+
+        let ifname_ptr = ifname.as_ptr();
+
+        unsafe {
+            for i in 0..ifname.len() {
+                assert_eq!(ifname.get_unchecked(i), &*ifname_ptr.add(i));
+            }
+        }
+    }
+
+    #[test]
+    fn test_if_name_as_ptr_ne_null() {
+        let ifname = IfName(CHARS);
+
+        let ifname_ptr = ifname.as_ptr();
+
+        assert_ne!(ifname_ptr, std::ptr::null());
+    }
+
+    #[test]
+    fn test_if_name_display() {
+        let ifname = IfName(CHARS);
+
+        let ifname_str = format!("{}", ifname);
+
+        assert_eq!(ifname_str, "0123456789ABCDE");
+    }
+
+    #[test]
+    fn test_if_name_debug() {
+        let ifname = IfName(CHARS);
+
+        let ifname_debug = format!("{:?}", ifname);
+
+        assert_eq!(ifname_debug, "\"0123456789ABCDE\"");
+    }
+
+    #[test]
+    fn test_if_name_from_octets() {
+        let source = &CHARS;
+        let expected = IfName(CHARS);
+
+        let ifname = IfName::from(source);
+
+        assert_eq!(ifname, expected);
+    }
+
+    #[test]
+    fn test_if_name_from_str() {
+        let source = "0123456789ABCDE";
+        let expected = IfName(CHARS);
+
+        let ifname = IfName::try_from(source).unwrap();
+
+        assert_eq!(ifname, expected);
+    }
+
+    #[test]
+    fn test_if_name_from_str_length_too_small() {
+        let source = "en";
+        let expected_error = "IfName::TooSmallError { value: \"en\", len: 2, min: 3 }";
+
+        let error = IfName::try_from(source).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
+    }
+
+    #[test]
+    fn test_if_name_from_str_length_too_large() {
+        let source = "0123456789ABCDEF";
+        let expected_error =
+            "IfName::TooLargeError { value: \"0123456789ABCDEF\", len: 16, max: 15 }";
+
+        let error = IfName::try_from(source).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
+    }
+
+    #[test]
+    fn test_if_name_from_str_empty() {
+        let source = "";
+        let expected_error = "IfName::TooSmallError { value: \"\", len: 0, min: 3 }";
+
+        let error = IfName::try_from(source).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
+    }
+
+    #[test]
+    fn test_if_name_from_str_nul_error() {
+        let source = "0123456\089ABCDE";
+        let expected_error = "IfName::InvalidCStringError { value: \"0123456\\089ABCDE\", error: \"nul byte found in provided data at position: 7\" }";
+
+        let error = IfName::try_from(source).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
     }
 }
