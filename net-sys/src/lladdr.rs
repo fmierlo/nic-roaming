@@ -130,21 +130,29 @@ mod tests {
     #[test]
     fn test_link_level_address_len() {
         let addr = LinkLevelAddress(OCTETS);
-        assert_eq!(addr.len(), 6);
+
+        let len = addr.len();
+
+        assert_eq!(len, 6);
     }
 
     #[test]
     fn test_link_level_address_octet_values() {
-        let addr = LinkLevelAddress(OCTETS);
+        let source = OCTETS;
+
+        let addr = LinkLevelAddress(source);
+
         for i in 0..addr.len() {
-            assert_eq!(addr[i], OCTETS[i]);
+            assert_eq!(addr[i], source[i]);
         }
     }
 
     #[test]
     fn test_link_level_address_copy() {
         let addr = LinkLevelAddress(OCTETS);
+
         let copy_addr = addr;
+
         for i in 0..addr.len() {
             assert_eq!(addr[i], copy_addr[i]);
         }
@@ -153,7 +161,9 @@ mod tests {
     #[test]
     fn test_link_level_address_clone() {
         let addr = LinkLevelAddress(OCTETS);
+
         let clone_addr = addr.clone();
+
         for i in 0..addr.len() {
             assert_eq!(addr[i], clone_addr[i]);
         }
@@ -163,6 +173,7 @@ mod tests {
     fn test_link_level_address_partial_eq() {
         let addr = LinkLevelAddress(OCTETS);
         let eq_addr = LinkLevelAddress(OCTETS);
+
         assert_eq!(addr, eq_addr);
     }
 
@@ -170,6 +181,7 @@ mod tests {
     fn test_link_level_address_partial_ne() {
         let addr = LinkLevelAddress(OCTETS);
         let ne_addr = LinkLevelAddress(unsafe { std::mem::zeroed() });
+
         assert_ne!(addr, ne_addr);
     }
 
@@ -177,6 +189,7 @@ mod tests {
     fn test_link_level_address_eq_and_hash() {
         let address = LinkLevelAddress(OCTETS);
         let mut map: HashMap<LinkLevelAddress, &str> = HashMap::new();
+
         map.insert(address, "01:02:03:04:05:06");
 
         assert_eq!(map.get(&address), Some(&"01:02:03:04:05:06"));
@@ -199,19 +212,25 @@ mod tests {
     fn test_link_level_address_as_ptr_ne_null() {
         let addr = LinkLevelAddress(OCTETS);
 
-        assert_ne!(addr.as_ptr(), std::ptr::null());
+        let addr_ptr = addr.as_ptr();
+
+        assert_ne!(addr_ptr, std::ptr::null());
     }
 
     #[test]
     fn test_link_level_address_display() {
         let addr = LinkLevelAddress(OCTETS);
-        assert_eq!(format!("{}", addr), "01:02:03:04:05:06");
+        let addr_str = format!("{}", addr);
+        assert_eq!(addr_str, "01:02:03:04:05:06");
     }
 
     #[test]
     fn test_link_level_address_debug() {
         let addr = LinkLevelAddress(OCTETS);
-        assert_eq!(format!("{:?}", addr), "\"01:02:03:04:05:06\"");
+
+        let addr_debug = format!("{:?}", addr);
+
+        assert_eq!(addr_debug, "\"01:02:03:04:05:06\"");
     }
 
     #[test]
@@ -219,7 +238,9 @@ mod tests {
         let source = &OCTETS;
         let expected = LinkLevelAddress(OCTETS);
 
-        assert_eq!(LinkLevelAddress::from(source), expected);
+        let addr = LinkLevelAddress::from(source);
+
+        assert_eq!(addr, expected);
     }
 
     #[test]
@@ -227,7 +248,9 @@ mod tests {
         let source = "00:02:03:04:ee:FF";
         let expected = LinkLevelAddress([0x00, 0x02, 0x03, 0x04, 0xEE, 0xff]);
 
-        assert_eq!(LinkLevelAddress::from_str(source).unwrap(), expected);
+        let addr = LinkLevelAddress::from_str(source).unwrap();
+
+        assert_eq!(addr, expected);
     }
 
     #[test]
