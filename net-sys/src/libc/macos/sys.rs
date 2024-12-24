@@ -43,6 +43,7 @@ pub(super) trait Sys: Debug {
 #[derive(Debug, Default)]
 pub(super) struct BoxSys(pub(super) Box<dyn Sys>);
 
+#[cfg(not(tarpaulin_include))]
 impl Default for Box<dyn Sys> {
     fn default() -> Self {
         Box::new(LibcSys::default())
@@ -60,6 +61,7 @@ impl Deref for BoxSys {
 #[derive(Debug, Default)]
 pub(super) struct LibcSys {}
 
+#[cfg(not(tarpaulin_include))]
 impl Sys for LibcSys {
     fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
         unsafe { libc::socket(domain, ty, protocol) }
@@ -75,6 +77,49 @@ impl Sys for LibcSys {
 
     fn errno(&self) -> c_int {
         unsafe { *libc::__error() }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_sys_strerror() {
+        let errno = 1;
+
+        let strerror = super::strerror(errno);
+
+        assert_eq!(strerror, "Operation not permitted");
+    }
+
+    #[test]
+    fn test_sys_strerror_undefined_errno() {
+        let errno = 0;
+
+        let strerror = super::strerror(errno);
+
+        assert_eq!(strerror, "Undefined error: 0");
+    }
+
+    #[test]
+    fn test_sys_strerror_unknown_errno() {
+        let errno = -1;
+
+        let strerror = super::strerror(errno);
+
+        assert_eq!(strerror, "Unknown error: -1");
+    }
+
+    #[test]
+    fn test_sys_boxsys_deref() {
+        let sys = super::mock::MockSys::default().with_nic(
+            "enx".try_into().unwrap(),
+            "01:02:03:04:05:06".parse().unwrap(),
+        );
+
+        let dyn_sys: &Box<dyn super::Sys> = &*super::BoxSys(Box::new(sys.clone()));
+
+        assert_eq!(format!("{:?}", dyn_sys), format!("{:?}", sys));
     }
 }
 
