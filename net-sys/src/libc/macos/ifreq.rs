@@ -39,3 +39,139 @@ pub(super) fn get_lladdr(ifreq: &ifreq) -> LinkLevelAddress {
     let sa_data = unsafe { &*(&ifreq.ifr_ifru.ifru_addr.sa_data as *const _ as *const [u8; 6]) };
     LinkLevelAddress::from(sa_data)
 }
+
+#[cfg(test)]
+mod tests {
+    use libc::{c_char, c_void};
+
+    const IF_REQ_SIZE: usize = 32;
+    const NAME_SIZE: usize = 16;
+    const NAME: [c_char; NAME_SIZE] = [
+        // '0'..'9' and 'A'..'F'
+        0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45,
+        0x00,
+    ];
+    const LADDR_SIZE: usize = 6;
+    const LLADDR: [u8; LADDR_SIZE] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+
+    struct IfReq<'a>(&'a libc::ifreq);
+
+    impl<'a> std::fmt::Debug for IfReq<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            unsafe {
+                f.debug_struct("ifreq")
+                    .field("ifr_name", &self.0.ifr_name)
+                    .field(
+                        "ifr_ifru.ifru_addr.sa_len",
+                        &self.0.ifr_ifru.ifru_addr.sa_len,
+                    )
+                    .field(
+                        "ifr_ifru.ifru_addr.sa_family",
+                        &self.0.ifr_ifru.ifru_addr.sa_family,
+                    )
+                    .field(
+                        "ifr_ifru.ifru_addr.sa_data",
+                        &self.0.ifr_ifru.ifru_addr.sa_data,
+                    )
+                    .finish()
+            }
+        }
+    }
+
+    impl<'a> PartialEq for IfReq<'a> {
+        fn eq(&self, other: &Self) -> bool {
+            let self_ptr = self.0 as *const _ as *const c_char;
+            let other_ptr = other.0 as *const _ as *const c_char;
+            for i in 0..IF_REQ_SIZE {
+                unsafe {
+                    if *self_ptr.add(i) != *other_ptr.add(i) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+    }
+
+    #[test]
+    fn test_ifreq_size() {
+        assert_eq!(std::mem::size_of::<libc::ifreq>(), IF_REQ_SIZE);
+    }
+
+    #[test]
+    fn test_ifreq_new() {
+        let expected_ifreq = unsafe { std::mem::zeroed() };
+
+        let ifreq = super::new();
+
+        assert_eq!(IfReq(&ifreq), IfReq(&expected_ifreq));
+    }
+
+    #[test]
+    fn test_ifreq_as_mut_ptr() {
+        let mut ifreq = super::new();
+        let exptected_ifreq_ptr = &ifreq as *const _ as *mut c_void;
+
+        let ifreq_ptr = super::as_mut_ptr(&mut ifreq);
+
+        assert_eq!(ifreq_ptr, exptected_ifreq_ptr);
+    }
+
+    #[test]
+    fn test_ifreq_from_mut_ptr() {
+        let mut expected_ifreq = super::new();
+        let ifreq_ptr = &expected_ifreq as *const _ as *mut c_void;
+
+        let ifreq = super::from_mut_ptr(ifreq_ptr);
+
+        assert_eq!(IfReq(ifreq), IfReq(&mut expected_ifreq));
+    }
+
+    #[test]
+    fn test_ifreq_set_name() {
+        let mut ifreq = super::new();
+
+        super::set_name(&mut ifreq, &super::IfName::from(&NAME));
+
+        assert_eq!(ifreq.ifr_name, NAME);
+    }
+
+    #[test]
+    fn test_ifreq_get_name() {
+        let mut ifreq = super::new();
+        unsafe {
+            std::ptr::copy_nonoverlapping(NAME.as_ptr(), ifreq.ifr_name.as_mut_ptr(), NAME.len());
+        }
+
+        let ifname = super::get_name(&mut ifreq);
+
+        assert_eq!(*ifname, NAME);
+    }
+
+    #[test]
+    fn test_ifreq_set_lladdr() {
+        let mut ifreq = super::new();
+        let sa_data_ptr =
+            unsafe { &*(&ifreq.ifr_ifru.ifru_addr.sa_data as *const _ as *const [u8; 6]) };
+
+        super::set_lladdr(&mut ifreq, &super::LinkLevelAddress::from(&LLADDR));
+
+        assert_eq!(*sa_data_ptr, LLADDR);
+    }
+
+    #[test]
+    fn test_ifreq_get_lladdr() {
+        let mut ifreq = super::new();
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                LLADDR.as_ptr(),
+                ifreq.ifr_ifru.ifru_addr.sa_data.as_mut_ptr() as *mut u8,
+                LLADDR.len(),
+            );
+        }
+
+        let lladdr = super::get_lladdr(&mut ifreq);
+
+        assert_eq!(*lladdr, LLADDR);
+    }
+}

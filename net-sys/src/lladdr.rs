@@ -125,6 +125,7 @@ mod tests {
     use super::{FromStr, LinkLevelAddress, OctetsType};
     use std::collections::HashMap;
 
+    const LLADDR_SIZE: usize = 6;
     const OCTETS: OctetsType = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
 
     #[test]
@@ -133,7 +134,7 @@ mod tests {
 
         let len = addr.len();
 
-        assert_eq!(len, 6);
+        assert_eq!(len, LLADDR_SIZE);
     }
 
     #[test]

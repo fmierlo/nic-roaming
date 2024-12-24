@@ -115,24 +115,25 @@ mod tests {
 
     use super::{IfName, IfNameType};
 
-    const CHARS: IfNameType = [
+    const IF_NAME_SIZE: usize = 16;
+    const IF_NAME: IfNameType = [
         // '0'..'9' and 'A'..'F'
         0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45,
         0x00,
     ];
 
     #[test]
-    fn test_if_name_len() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_len() {
+        let ifname = IfName(IF_NAME);
 
         let len = ifname.len();
 
-        assert_eq!(len, 16);
+        assert_eq!(len, IF_NAME_SIZE);
     }
 
     #[test]
-    fn test_if_name_char_values() {
-        let source = CHARS;
+    fn test_ifname_char_values() {
+        let source = IF_NAME;
 
         let ifname = IfName(source);
 
@@ -142,8 +143,8 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_copy() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_copy() {
+        let ifname = IfName(IF_NAME);
 
         let copy_ifname = ifname;
 
@@ -153,8 +154,8 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_clone() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_clone() {
+        let ifname = IfName(IF_NAME);
 
         let clone_ifname = ifname.clone();
 
@@ -164,24 +165,24 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_partial_eq() {
-        let ifname = IfName(CHARS);
-        let eq_ifname = IfName(CHARS);
+    fn test_ifname_partial_eq() {
+        let ifname = IfName(IF_NAME);
+        let eq_ifname = IfName(IF_NAME);
 
         assert_eq!(ifname, eq_ifname);
     }
 
     #[test]
-    fn test_if_name_partial_ne() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_partial_ne() {
+        let ifname = IfName(IF_NAME);
         let ne_ifname = IfName(unsafe { std::mem::zeroed() });
 
         assert_ne!(ifname, ne_ifname);
     }
 
     #[test]
-    fn test_if_name_eq_and_hash() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_eq_and_hash() {
+        let ifname = IfName(IF_NAME);
         let mut map: HashMap<IfName, &str> = HashMap::new();
 
         map.insert(ifname, "interface");
@@ -190,8 +191,8 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_as_ptr() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_as_ptr() {
+        let ifname = IfName(IF_NAME);
 
         let ifname_ptr = ifname.as_ptr();
 
@@ -203,8 +204,8 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_as_ptr_ne_null() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_as_ptr_ne_null() {
+        let ifname = IfName(IF_NAME);
 
         let ifname_ptr = ifname.as_ptr();
 
@@ -212,8 +213,8 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_display() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_display() {
+        let ifname = IfName(IF_NAME);
 
         let ifname_str = format!("{}", ifname);
 
@@ -221,8 +222,8 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_debug() {
-        let ifname = IfName(CHARS);
+    fn test_ifname_debug() {
+        let ifname = IfName(IF_NAME);
 
         let ifname_debug = format!("{:?}", ifname);
 
@@ -230,9 +231,9 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_from_octets() {
-        let source = &CHARS;
-        let expected = IfName(CHARS);
+    fn test_ifname_from_octets() {
+        let source = &IF_NAME;
+        let expected = IfName(IF_NAME);
 
         let ifname = IfName::from(source);
 
@@ -240,9 +241,9 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_from_str() {
+    fn test_ifname_from_str() {
         let source = "0123456789ABCDE";
-        let expected = IfName(CHARS);
+        let expected = IfName(IF_NAME);
 
         let ifname = IfName::try_from(source).unwrap();
 
@@ -250,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_from_str_length_too_small() {
+    fn test_ifname_from_str_length_too_small() {
         let source = "en";
         let expected_error = "IfName::TooSmallError { value: \"en\", len: 2, min: 3 }";
 
@@ -261,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_from_str_length_too_large() {
+    fn test_ifname_from_str_length_too_large() {
         let source = "0123456789ABCDEF";
         let expected_error =
             "IfName::TooLargeError { value: \"0123456789ABCDEF\", len: 16, max: 15 }";
@@ -273,7 +274,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_from_str_empty() {
+    fn test_ifname_from_str_empty() {
         let source = "";
         let expected_error = "IfName::TooSmallError { value: \"\", len: 0, min: 3 }";
 
@@ -284,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if_name_from_str_nul_error() {
+    fn test_ifname_from_str_nul_error() {
         let source = "0123456\089ABCDE";
         let expected_error = "IfName::InvalidCStringError { value: \"0123456\\089ABCDE\", error: \"nul byte found in provided data at position: 7\" }";
 
