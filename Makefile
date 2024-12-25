@@ -11,6 +11,9 @@ run:
 clean:
 	rm -rf target
 
+lint:
+	cargo clippy
+
 test-deps:
 	cargo install cargo-tarpaulin
 

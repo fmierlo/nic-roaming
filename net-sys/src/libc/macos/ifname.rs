@@ -69,7 +69,7 @@ impl Display for IfName {
     }
 }
 
-impl<'a> From<&IfName> for String {
+impl From<&IfName> for String {
     fn from(value: &IfName) -> Self {
         let c_str = unsafe { std::ffi::CStr::from_ptr(value.as_ptr()) };
         c_str.to_bytes().escape_ascii().to_string()

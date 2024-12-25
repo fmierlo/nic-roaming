@@ -96,10 +96,10 @@ impl Deref for LibcSocket {
     }
 }
 
-impl<'a> Socket for LibcSocket {
+impl Socket for LibcSocket {
     fn open_local_dgram(&self) -> Result<Box<dyn OpenSocket + '_>> {
         match self.socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
-            fd if fd >= 0 => Ok(Box::new(LibcOpenSocket { fd, sys: &self })),
+            fd if fd >= 0 => Ok(Box::new(LibcOpenSocket { fd, sys: self })),
             ret => {
                 let errno = self.errno();
                 Err(Error::OpenLocalDgram(ret, errno).into())
