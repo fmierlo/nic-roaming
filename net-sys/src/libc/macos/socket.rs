@@ -183,6 +183,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_socket_debug() {
+        let socket = super::mock::MockSocket::default();
+        let expected_debug = "BoxSocket(MockSocket { kv: RefCell { value: {} } })";
+
+        let box_socket = super::BoxSocket(Box::new(socket));
+
+        assert_eq!(format!("{:?}", box_socket), expected_debug);
+    }
+
+    #[test]
+    fn test_socket_deref() {
+        let socket = super::mock::MockSocket::default();
+        let expected_deref_box_socket = "MockSocket { kv: RefCell { value: {} } }";
+
+        let deref_box_socket = &*super::BoxSocket(Box::new(socket));
+
+        assert_eq!(format!("{:?}", deref_box_socket), expected_deref_box_socket);
+    }
+
     // #[test]
     // fn test_socket_new() {
     //     let sys = MockSys::default();
