@@ -11,7 +11,7 @@ mod ioccom {
     // upper word are used to encode the in/out status of the parameter.
 
     // param char 'i' as c_ulong
-    pub(crate) const I: c_ulong = 105;
+    pub(super) const I: c_ulong = 105;
     // parameter length, at most 13 bits
     const IOCPARM_MASK: c_ulong = 0x1fff;
     // copy parameters out
@@ -27,12 +27,12 @@ mod ioccom {
     }
 
     #[cfg(not(tarpaulin_include))]
-    pub(crate) const fn iow(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
+    pub(super) const fn iow(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
         ioc(IOC_IN, group, num, len)
     }
 
     #[cfg(not(tarpaulin_include))]
-    pub(crate) const fn iorw(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
+    pub(super) const fn iorw(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
         ioc(IOC_INOUT, group, num, len)
     }
 }
@@ -81,7 +81,7 @@ impl Deref for BoxSys {
 }
 
 #[derive(Debug, Default)]
-pub(super) struct LibcSys {}
+struct LibcSys {}
 
 #[cfg(not(tarpaulin_include))]
 impl Sys for LibcSys {

@@ -86,7 +86,7 @@ impl Deref for BoxSocket {
 }
 
 #[derive(Debug, Default)]
-pub(super) struct LibcSocket(BoxSys);
+struct LibcSocket(BoxSys);
 
 impl Deref for LibcSocket {
     type Target = BoxSys;
@@ -113,7 +113,7 @@ pub(super) trait OpenSocket {
     fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
 }
 
-pub(super) struct LibcOpenSocket<'a> {
+struct LibcOpenSocket<'a> {
     fd: libc::c_int,
     sys: &'a BoxSys,
 }
