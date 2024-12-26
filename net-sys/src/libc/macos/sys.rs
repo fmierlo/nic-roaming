@@ -165,9 +165,9 @@ mod tests {
         let expected_sys = "MockSys { kv: RefCell { value: {} } }";
         let sys = super::mock::MockSys::default();
 
-        let sys = &*super::BoxSys(Box::new(sys));
+        let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
-        assert_eq!(format!("{:?}", sys), expected_sys);
+        assert_eq!(format!("{:?}", deref_box_sys), expected_sys);
     }
 }
 
