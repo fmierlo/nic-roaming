@@ -151,16 +151,23 @@ mod tests {
     }
 
     #[test]
-    fn test_sys_boxsys_deref() {
-        let sys = super::mock::MockSys::default().with_nic(
-            "enx".try_into().unwrap(),
-            "01:02:03:04:05:06".parse().unwrap(),
-        );
-        let expected_debug = "MockSys { kv: RefCell { value: {\"enx\": \"01:02:03:04:05:06\"} } }";
+    fn test_sys_debug() {
+        let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} } })";
+        let sys = super::mock::MockSys::default();
 
-        let dyn_sys = &*super::BoxSys(Box::new(sys.clone()));
+        let box_sys = super::BoxSys(Box::new(sys));
 
-        assert_eq!(format!("{:?}", dyn_sys), expected_debug);
+        assert_eq!(format!("{:?}", box_sys), expected_debug);
+    }
+
+    #[test]
+    fn test_sys_deref() {
+        let expected_sys = "MockSys { kv: RefCell { value: {} } }";
+        let sys = super::mock::MockSys::default();
+
+        let sys = &*super::BoxSys(Box::new(sys));
+
+        assert_eq!(format!("{:?}", sys), expected_sys);
     }
 }
 
