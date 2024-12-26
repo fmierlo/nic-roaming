@@ -44,7 +44,7 @@ pub(super) fn get_lladdr(ifreq: &ifreq) -> LinkLevelAddress {
 mod tests {
     use libc::{c_char, c_void};
 
-    const IF_REQ_SIZE: usize = 32;
+    const IFREQ_SIZE: usize = 32;
     const NAME_SIZE: usize = 16;
     const NAME: [c_char; NAME_SIZE] = [
         // '0'..'9' and 'A'..'F'
@@ -82,7 +82,7 @@ mod tests {
         fn eq(&self, other: &Self) -> bool {
             let self_ptr = self.0 as *const _ as *const c_char;
             let other_ptr = other.0 as *const _ as *const c_char;
-            for i in 0..IF_REQ_SIZE {
+            for i in 0..IFREQ_SIZE {
                 unsafe {
                     if *self_ptr.add(i) != *other_ptr.add(i) {
                         return false;
@@ -95,7 +95,9 @@ mod tests {
 
     #[test]
     fn test_ifreq_size() {
-        assert_eq!(std::mem::size_of::<libc::ifreq>(), IF_REQ_SIZE);
+        let expected_size = std::mem::size_of::<libc::ifreq>();
+
+        assert_eq!(IFREQ_SIZE, expected_size);
     }
 
     #[test]

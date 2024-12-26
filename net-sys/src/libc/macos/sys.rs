@@ -1,31 +1,53 @@
 use libc::{c_int, c_ulong, c_void};
 use std::{fmt::Debug, ops::Deref};
 
-// /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/ioccom.h
+mod ioccom {
+    use libc::c_ulong;
 
-// /* copy parameters out */
-// #define IOC_OUT         (__uint32_t)0x40000000
-// /* copy parameters in */
-// #define IOC_IN          (__uint32_t)0x80000000
-// /* copy parameters in and out */
-// #define IOC_INOUT       (IOC_IN|IOC_OUT)
+    // /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/ioccom.h
 
-// #define _IOC(inout, group, num, len) \
-// 	(inout | ((len & IOCPARM_MASK) << 16) | ((group) << 8) | (num))
-// #define _IOW(g, n, t)     _IOC(IOC_IN,	(g), (n), sizeof(t))
-// /* this should be _IORW, but stdio got there first */
-// #define _IOWR(g, n, t)    _IOC(IOC_INOUT,	(g), (n), sizeof(t))
+    // Ioctl's have the command encoded in the lower word, and the size of
+    // any in or out parameters in the upper word.  The high 3 bits of the
+    // upper word are used to encode the in/out status of the parameter.
 
-// 'i' as u8 = 105
-// mem::size_of::<ifreq>() = 32
+    // param char 'i' as c_ulong
+    pub(crate) const I: c_ulong = 105;
+    // parameter length, at most 13 bits
+    const IOCPARM_MASK: c_ulong = 0x1fff;
+    // copy parameters out
+    const IOC_OUT: c_ulong = 0x40000000;
+    // copy parameters in
+    const IOC_IN: c_ulong = 0x80000000;
+    // copy parameters in and out
+    const IOC_INOUT: c_ulong = IOC_IN | IOC_OUT;
 
-// #define SIOCSIFLLADDR   _IOW('i', 60, struct ifreq)     /* set link level addr */
-// s = 0x80000000 | 32 << 16 | (105 << 8) | 60
-pub(super) const SIOCSIFLLADDR: c_ulong = 0x8020693c;
+    #[cfg(not(tarpaulin_include))]
+    const fn ioc(inout: c_ulong, group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
+        inout | ((len & IOCPARM_MASK) << 16) | ((group) << 8) | (num)
+    }
 
-// #define SIOCSIFLLADDR   _IORW('i', 158, struct ifreq)     /* set link level addr */
-// g = (0x80000000 |0x40000000) | 32 << 16 | (105 << 8) | 158
-pub(super) const SIOCGIFLLADDR: c_ulong = 0xc020699e;
+    #[cfg(not(tarpaulin_include))]
+    pub(crate) const fn iow(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
+        ioc(IOC_IN, group, num, len)
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub(crate) const fn iorw(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
+        ioc(IOC_INOUT, group, num, len)
+    }
+}
+
+const IFREQ_SIZE: c_ulong = 32;
+
+// Get link level addr
+// SIOCGIFLLADDR = (0x80000000 |0x40000000) | 32 << 16 | (105 << 8) | 158 = 0xc020699e
+// https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/sockio.h#L265
+pub(super) const SIOCGIFLLADDR: c_ulong = ioccom::iorw(ioccom::I, 158, IFREQ_SIZE);
+
+// Set link level addr
+// SIOCSIFLLADDR = 0x80000000 | 32 << 16 | (105 << 8) | 60 = 0x8020693c
+// https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/sockio.h#L146
+pub(super) const SIOCSIFLLADDR: c_ulong = ioccom::iow(ioccom::I, 60, IFREQ_SIZE);
 
 pub(super) fn strerror(errno: c_int) -> String {
     let ptr = unsafe { libc::strerror(errno) };
@@ -82,6 +104,24 @@ impl Sys for LibcSys {
 
 #[cfg(test)]
 mod tests {
+    use libc::c_ulong;
+
+    #[test]
+    fn test_ifreq_size() {
+        let expected_size: c_ulong = std::mem::size_of::<libc::ifreq>().try_into().unwrap();
+
+        assert_eq!(super::IFREQ_SIZE, expected_size);
+    }
+
+    #[test]
+    fn test_get_link_level_addr() {
+        assert_eq!(super::SIOCGIFLLADDR, 0xc020699e)
+    }
+
+    #[test]
+    fn test_set_link_level_addr() {
+        assert_eq!(super::SIOCSIFLLADDR, 0x8020693c)
+    }
 
     #[test]
     fn test_sys_strerror() {
