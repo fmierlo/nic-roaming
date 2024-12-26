@@ -156,10 +156,11 @@ mod tests {
             "enx".try_into().unwrap(),
             "01:02:03:04:05:06".parse().unwrap(),
         );
+        let expected_debug = "MockSys { kv: RefCell { value: {\"enx\": \"01:02:03:04:05:06\"} } }";
 
-        let dyn_sys: &Box<dyn super::Sys> = &*super::BoxSys(Box::new(sys.clone()));
+        let dyn_sys = &*super::BoxSys(Box::new(sys.clone()));
 
-        assert_eq!(format!("{:?}", dyn_sys), format!("{:?}", sys));
+        assert_eq!(format!("{:?}", dyn_sys), expected_debug);
     }
 }
 
