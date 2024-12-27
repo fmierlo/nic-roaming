@@ -35,7 +35,7 @@ impl Nic {
 mod tests {
     use super::super::socket::mock::MockSocket;
     use super::{BoxSocket, IfName, Nic};
-    use crate::{LinkLevelAddress, Result};
+    use crate::LinkLevelAddress;
 
     impl Nic {
         fn new(socket: &MockSocket) -> Nic {
@@ -55,28 +55,25 @@ mod tests {
     }
 
     #[test]
-    fn test_get_lladd() -> Result<()> {
-        let ifname: IfName = "enx".try_into()?;
-        let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
+    fn test_get_lladd() {
+        let ifname: IfName = "enx".try_into().unwrap();
+        let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse().unwrap();
         let socket = MockSocket::default().with_nic(ifname, expected_lladdr);
 
-        let lladdr = Nic::new(&socket).get_lladd(&ifname)?;
+        let lladdr = Nic::new(&socket).get_lladd(&ifname).unwrap();
 
         assert_eq!(lladdr, expected_lladdr);
-
-        Ok(())
     }
 
     #[test]
-    fn test_set_lladd() -> Result<()> {
-        let ifname: IfName = "enx".try_into()?;
-        let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
+    fn test_set_lladd() {
+        let ifname: IfName = "enx".try_into().unwrap();
+        let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse().unwrap();
 
         let socket = MockSocket::default();
 
-        Nic::new(&socket).set_lladd(&ifname, &lladdr)?;
+        Nic::new(&socket).set_lladd(&ifname, &lladdr).unwrap();
 
         assert!(socket.has_nic(&ifname, &lladdr));
-        Ok(())
     }
 }
