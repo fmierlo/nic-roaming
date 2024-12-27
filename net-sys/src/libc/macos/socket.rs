@@ -204,13 +204,6 @@ mod tests {
     }
 
     // #[test]
-    // fn test_socket_new() {
-    //     let sys = MockSys::default();
-    //     let socket = Socket::new(sys.as_sys());
-    //     assert_eq!(socket.sys, sys);
-    // }
-
-    // #[test]
     // fn test_socket_open_local_dgram() -> Result<()> {
     //     let sys = MockSys::default();
     //     let socket = Socket::new(sys.as_sys());
@@ -232,17 +225,16 @@ mod tests {
 
     #[test]
     fn test_local_dgram_socket_get_lladdr() -> Result<()> {
-        // Given
         let ifname: IfName = "enx".try_into()?;
         let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
         let sys = MockSys::default().with_nic(ifname, expected_lladdr);
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &ifname);
-        // When
+
         LibcSocket::new(&sys)
             .open_local_dgram()?
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
-        // Then
+
         assert_eq!(ifreq::get_lladdr(&ifreq), expected_lladdr);
         Ok(())
     }
@@ -263,18 +255,17 @@ mod tests {
 
     #[test]
     fn test_local_dgram_socket_set_lladdr() -> Result<()> {
-        // Given
         let ifname: IfName = "enx".try_into()?;
         let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
         let sys = MockSys::default();
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &ifname);
         ifreq::set_lladdr(&mut ifreq, &lladdr);
-        // When
+
         LibcSocket::new(&sys)
             .open_local_dgram()?
             .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
-        // Then
+
         assert!(sys.has_nic(&ifname, &lladdr));
         Ok(())
     }
@@ -306,8 +297,9 @@ mod tests {
 
 #[cfg(test)]
 pub(super) mod mock {
+    use super::super::ifname::IfName;
     use super::ifreq::{self};
-    use super::{super::ifname::IfName, OpenSocket, Socket};
+    use super::{OpenSocket, Socket};
     use crate::{LinkLevelAddress, Result};
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
 

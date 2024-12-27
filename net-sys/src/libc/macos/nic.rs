@@ -33,7 +33,8 @@ impl Nic {
 
 #[cfg(test)]
 mod tests {
-    use super::{super::socket::mock::MockSocket, BoxSocket, IfName, Nic};
+    use super::super::socket::mock::MockSocket;
+    use super::{BoxSocket, IfName, Nic};
     use crate::{LinkLevelAddress, Result};
 
     impl Nic {
