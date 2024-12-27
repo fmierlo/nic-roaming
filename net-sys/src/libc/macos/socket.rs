@@ -108,11 +108,12 @@ impl Socket for LibcSocket {
     }
 }
 
-pub(super) trait OpenSocket {
+pub(super) trait OpenSocket: Debug {
     fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
     fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
 }
 
+#[derive(Debug)]
 struct LibcOpenSocket<'a> {
     fd: libc::c_int,
     sys: &'a BoxSys,
@@ -174,7 +175,7 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::sys::mock::MockSys;
+    use super::super::sys::mock::{MockSys, Then, When};
     use super::{ifreq, BoxSys, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
 
     impl<'a> LibcSocket {
@@ -212,25 +213,45 @@ mod tests {
         assert_eq!(format!("{:?}", deref_box_socket), expected_deref);
     }
 
-    // #[test]
-    // fn test_socket_open_local_dgram() -> Result<()> {
-    //     let sys = MockSys::default();
-    //     let socket = Socket::new(sys.as_sys());
-    //     let fd = socket.open_local_dgram()?;
-    //     assert!(!fd.is_null());
-    //     Ok(())
-    // }
+    #[test]
+    fn test_open_socket_box_debug() {
+        let sys = &BoxSys(Box::new(MockSys::default()));
+        let expected_debug = "LibcOpenSocket { fd: 0, sys: BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } }) }";
 
-    // #[test]
-    // fn test_socket_open_local_dgram_err() -> Result<()> {
-    //     let mut sys = MockSys::default();
-    //     // Set the error code to -1
-    //     sys.set_last_os_error(ErrorCode::last_os_error());
-    //     let socket = Socket::new(sys.as_sys());
-    //     let fd = socket.open_local_dgram()?;
-    //     assert_eq!(fd, -1);
-    //     Ok(())
-    // }
+        let box_open_socket: Box<dyn super::OpenSocket> =
+            Box::new(super::LibcOpenSocket { fd: 0, sys });
+
+        assert_eq!(format!("{:?}", box_open_socket), expected_debug);
+    }
+
+    #[test]
+    fn test_socket_open_local_dgram() {
+        let expected_open_socket = "LibcOpenSocket { fd: 0, sys: BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: Some(Socket((1, 2, 0), Success)) }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } }) }";
+        let sys = MockSys::default().when(When::Socket(
+            (libc::AF_LOCAL, libc::SOCK_DGRAM, 0),
+            Then::Success,
+        ));
+        let socket = LibcSocket::new(&sys);
+
+        let open_socket = socket.open_local_dgram().unwrap();
+
+        assert_eq!(format!("{:?}", open_socket), expected_open_socket);
+    }
+
+    #[test]
+    fn test_socket_open_local_dgram_error() {
+        let expected_error = "Socket::OpenLocalDgramError { ret: -1, errno: 1, strerror: \"Operation not permitted\" }";
+        let sys = MockSys::default().when(When::Socket(
+            (libc::AF_LOCAL, libc::SOCK_DGRAM, 0),
+            Then::Error(1),
+        ));
+        let socket = LibcSocket::new(&sys);
+
+        let error = socket.open_local_dgram().unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+        assert_eq!(format!("{:?}", error), expected_error);
+    }
 
     #[test]
     fn test_local_dgram_socket_get_lladdr() -> Result<()> {
@@ -344,6 +365,7 @@ pub(super) mod mock {
         }
     }
 
+    #[derive(Debug)]
     pub(super) struct MockOpenSocket<'a> {
         kv: &'a Rc<KeyValue>,
     }

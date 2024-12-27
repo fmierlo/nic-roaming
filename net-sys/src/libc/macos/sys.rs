@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} } })";
+        let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } })";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys { kv: RefCell { value: {} } }";
+        let expected_deref = "MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } }";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -187,14 +187,57 @@ pub(super) mod mock {
     use libc::{c_int, c_ulong, c_void};
     use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
+    #[derive(Copy, Clone, Debug, Default)]
+    pub(crate) enum Then {
+        #[default]
+        Success,
+        Error(c_int),
+    }
+
+    impl From<Then> for c_int {
+        fn from(value: Then) -> Self {
+            match value {
+                Then::Success => 0,
+                Then::Error(_) => -1,
+            }
+        }
+    }
+
+    #[derive(Copy, Clone, Debug)]
+    struct Socket((c_int, c_int, c_int), Then);
+
+    #[derive(Clone, Debug)]
+    struct IoCtl((c_int, c_ulong), Then);
+
+    #[derive(Debug)]
+    pub(crate) enum When {
+        Socket((c_int, c_int, c_int), Then),
+        IoCtl((c_int, c_ulong), Then),
+    }
+
     type KeyValue = RefCell<HashMap<IfName, LinkLevelAddress>>;
 
     #[derive(Clone, Debug, Default)]
     pub(crate) struct MockSys {
         kv: Rc<KeyValue>,
+        when_socket: RefCell<Option<Socket>>,
+        when_ioctl: RefCell<Option<IoCtl>>,
+        then_errno: RefCell<Option<c_int>>,
     }
 
     impl MockSys {
+        pub(crate) fn when(self, when: When) -> Self {
+            match when {
+                When::Socket(params, then) => {
+                    *self.when_socket.borrow_mut() = Some(Socket(params, then))
+                }
+                When::IoCtl(params, then) => {
+                    *self.when_ioctl.borrow_mut() = Some(IoCtl(params, then))
+                }
+            }
+            self
+        }
+
         pub(crate) fn with_nic(self, ifname: IfName, lladdr: LinkLevelAddress) -> Self {
             self.kv.borrow_mut().insert(ifname, lladdr);
             self
@@ -206,12 +249,25 @@ pub(super) mod mock {
                 None => false,
             }
         }
+
+        fn then(&self, then: Then) -> Then {
+            if let Then::Error(errno) = then {
+                *self.then_errno.borrow_mut() = Some(errno)
+            }
+            then
+        }
     }
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
             eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol})");
-            0
+
+            self.when_socket
+                .borrow()
+                .filter(|Socket(when, _)| when == &(domain, ty, protocol))
+                .map(|Socket(_, then)| self.then(then))
+                .unwrap_or_default()
+                .into()
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
@@ -249,7 +305,7 @@ pub(super) mod mock {
         }
 
         fn errno(&self) -> c_int {
-            libc::EPERM // Operation not permitted
+            (*self.then_errno.borrow()).unwrap()
         }
     }
 }
