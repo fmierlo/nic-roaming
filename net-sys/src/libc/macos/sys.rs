@@ -65,7 +65,6 @@ pub(super) trait Sys: Debug {
 #[derive(Debug, Default)]
 pub(super) struct BoxSys(pub(super) Box<dyn Sys>);
 
-#[cfg(not(tarpaulin_include))]
 impl Default for Box<dyn Sys> {
     fn default() -> Self {
         Box::new(LibcSys::default())
@@ -151,6 +150,15 @@ mod tests {
     }
 
     #[test]
+    fn test_sys_box_default() {
+        let expected_default = "BoxSys(LibcSys)";
+
+        let box_sys = super::BoxSys::default();
+
+        assert_eq!(format!("{:?}", box_sys), expected_default);
+    }
+
+    #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
         let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} } })";
@@ -163,11 +171,11 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref_box_sys = "MockSys { kv: RefCell { value: {} } }";
+        let expected_deref = "MockSys { kv: RefCell { value: {} } }";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
-        assert_eq!(format!("{:?}", deref_box_sys), expected_deref_box_sys);
+        assert_eq!(format!("{:?}", deref_box_sys), expected_deref);
     }
 }
 

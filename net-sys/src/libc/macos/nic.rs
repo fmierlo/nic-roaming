@@ -46,15 +46,22 @@ mod tests {
     }
 
     #[test]
+    fn test_nic_default() {
+        let expected_default = "Nic { socket: BoxSocket(LibcSocket(BoxSys(LibcSys))) }";
+
+        let nic = super::Nic::default();
+
+        assert_eq!(format!("{:?}", nic), expected_default);
+    }
+
+    #[test]
     fn test_get_lladd() -> Result<()> {
-        // Given
         let ifname: IfName = "enx".try_into()?;
         let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
-
         let socket = MockSocket::default().with_nic(ifname, expected_lladdr);
-        // When
+
         let lladdr = Nic::new(&socket).get_lladd(&ifname)?;
-        // Then
+
         assert_eq!(lladdr, expected_lladdr);
 
         Ok(())
@@ -62,14 +69,13 @@ mod tests {
 
     #[test]
     fn test_set_lladd() -> Result<()> {
-        // Given
         let ifname: IfName = "enx".try_into()?;
         let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
 
         let socket = MockSocket::default();
-        // When
+
         Nic::new(&socket).set_lladd(&ifname, &lladdr)?;
-        // Then
+
         assert!(socket.has_nic(&ifname, &lladdr));
         Ok(())
     }
