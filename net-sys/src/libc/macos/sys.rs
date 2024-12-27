@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } })";
+        let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, when_close: RefCell { value: None }, then_errno: RefCell { value: None } })";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } }";
+        let expected_deref = "MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, when_close: RefCell { value: None }, then_errno: RefCell { value: None } }";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -211,13 +211,17 @@ pub(super) mod mock {
     #[derive(Copy, Clone, Debug)]
     struct Socket((c_int, c_int, c_int), Then);
 
-    #[derive(Clone, Debug)]
+    #[derive(Copy, Clone, Debug)]
     struct IoCtl((c_int, c_ulong), Then);
+
+    #[derive(Copy, Clone, Debug)]
+    struct Close((c_int,), Then);
 
     #[derive(Debug)]
     pub(crate) enum When {
         Socket((c_int, c_int, c_int), Then),
         IoCtl((c_int, c_ulong), Then),
+        Close((c_int,), Then),
     }
 
     type KeyValue = RefCell<HashMap<IfName, LinkLevelAddress>>;
@@ -227,6 +231,7 @@ pub(super) mod mock {
         kv: Rc<KeyValue>,
         when_socket: RefCell<Option<Socket>>,
         when_ioctl: RefCell<Option<IoCtl>>,
+        when_close: RefCell<Option<Close>>,
         then_errno: RefCell<Option<c_int>>,
     }
 
@@ -238,6 +243,9 @@ pub(super) mod mock {
                 }
                 When::IoCtl(params, then) => {
                     *self.when_ioctl.borrow_mut() = Some(IoCtl(params, then))
+                }
+                When::Close(params, then) => {
+                    *self.when_close.borrow_mut() = Some(Close(params, then))
                 }
             }
             self
@@ -255,7 +263,7 @@ pub(super) mod mock {
             }
         }
 
-        fn then(&self, then: Then) -> Then {
+        fn handle_then(&self, then: Then) -> Then {
             if let Then::Error(errno) = then {
                 *self.then_errno.borrow_mut() = Some(errno)
             }
@@ -270,7 +278,7 @@ pub(super) mod mock {
             self.when_socket
                 .borrow()
                 .filter(|Socket(when, _)| when == &(domain, ty, protocol))
-                .map(|Socket(_, then)| self.then(then))
+                .map(|Socket(_, then)| self.handle_then(then))
                 .unwrap_or_default()
                 .into()
         }
@@ -288,14 +296,35 @@ pub(super) mod mock {
                     }
                     None => {
                         eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, ifname={ifname}) -> lladd=none");
-                        -1
+                        self.when_ioctl
+                            .borrow()
+                            .filter(|IoCtl(when, _)| when == &(fd, request))
+                            .map(|IoCtl(_, then)| self.handle_then(then))
+                            .unwrap_or_default()
+                            .into()
                     }
                 },
                 SIOCSIFLLADDR => {
-                    let lladdr = ifreq::get_lladdr(ifreq);
-                    eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, ifname={ifname}, lladd={lladdr}) -> true");
-                    self.kv.borrow_mut().insert(ifname, lladdr);
-                    0
+                    match self
+                        .when_ioctl
+                        .borrow()
+                        .filter(|IoCtl(when, _)| when == &(fd, request))
+                        .map(|IoCtl(_, then)| {
+                            if let Then::Success(0) = then {
+                                let lladdr = ifreq::get_lladdr(ifreq);
+                                eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, ifname={ifname}, lladd={lladdr}) -> true");
+                                self.kv.borrow_mut().insert(ifname, lladdr);
+                            }
+                            self.handle_then(then)
+                        }) {
+                        Some(then) => then.into(),
+                        None => {
+                            let lladdr = ifreq::get_lladdr(ifreq);
+                            eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, ifname={ifname}, lladd={lladdr}) -> true");
+                            self.kv.borrow_mut().insert(ifname, lladdr);
+                            0
+                        }
+                    }
                 }
                 request => {
                     eprintln!("ERROR: MockSys.ioctl(fd={fd}, request={request}, ifname={ifname}) -> err='Invalid request value'");
@@ -306,7 +335,12 @@ pub(super) mod mock {
 
         fn close(&self, fd: c_int) -> c_int {
             eprintln!("MockSys.close(fd={fd})");
-            0
+            self.when_close
+                .borrow()
+                .filter(|Close(when, _)| when == &(fd,))
+                .map(|Close(_, then)| self.handle_then(then))
+                .unwrap_or_default()
+                .into()
         }
 
         fn errno(&self) -> c_int {
