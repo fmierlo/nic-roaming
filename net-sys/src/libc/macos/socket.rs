@@ -184,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn test_socket_debug() {
+    fn test_socket_box_debug() {
         let socket = super::mock::MockSocket::default();
         let expected_debug = "BoxSocket(MockSocket { kv: RefCell { value: {} } })";
 
@@ -194,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn test_socket_deref() {
+    fn test_socket_box_deref() {
         let socket = super::mock::MockSocket::default();
         let expected_deref_box_socket = "MockSocket { kv: RefCell { value: {} } }";
 
