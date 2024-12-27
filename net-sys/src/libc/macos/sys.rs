@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sys_debug() {
+    fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
         let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} } })";
 
@@ -161,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sys_deref() {
+    fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
         let expected_deref_box_sys = "MockSys { kv: RefCell { value: {} } }";
 
