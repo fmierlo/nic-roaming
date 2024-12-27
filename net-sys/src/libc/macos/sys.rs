@@ -187,17 +187,22 @@ pub(super) mod mock {
     use libc::{c_int, c_ulong, c_void};
     use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
-    #[derive(Copy, Clone, Debug, Default)]
+    #[derive(Copy, Clone, Debug)]
     pub(crate) enum Then {
-        #[default]
-        Success,
+        Success(c_int),
         Error(c_int),
+    }
+
+    impl Default for Then {
+        fn default() -> Self {
+            Then::Success(0)
+        }
     }
 
     impl From<Then> for c_int {
         fn from(value: Then) -> Self {
             match value {
-                Then::Success => 0,
+                Then::Success(value) => value,
                 Then::Error(_) => -1,
             }
         }

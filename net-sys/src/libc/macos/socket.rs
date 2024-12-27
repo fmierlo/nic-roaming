@@ -226,10 +226,10 @@ mod tests {
 
     #[test]
     fn test_socket_open_local_dgram() {
-        let expected_open_socket = "LibcOpenSocket { fd: 0, sys: BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: Some(Socket((1, 2, 0), Success)) }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } }) }";
+        let expected_open_socket = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: Some(Socket((1, 2, 0), Success(3))) }, when_ioctl: RefCell { value: None }, then_errno: RefCell { value: None } }) }";
         let sys = MockSys::default().when(When::Socket(
             (libc::AF_LOCAL, libc::SOCK_DGRAM, 0),
-            Then::Success,
+            Then::Success(3),
         ));
         let socket = LibcSocket::new(&sys);
 
@@ -243,7 +243,7 @@ mod tests {
         let expected_error = "Socket::OpenLocalDgramError { ret: -1, errno: 1, strerror: \"Operation not permitted\" }";
         let sys = MockSys::default().when(When::Socket(
             (libc::AF_LOCAL, libc::SOCK_DGRAM, 0),
-            Then::Error(1),
+            Then::Error(libc::EPERM),
         ));
         let socket = LibcSocket::new(&sys);
 
