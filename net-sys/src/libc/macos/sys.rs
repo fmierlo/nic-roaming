@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, when_close: RefCell { value: None }, then_errno: RefCell { value: None } })";
+        let expected_debug = "BoxSys(MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } })";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, when_close: RefCell { value: None }, then_errno: RefCell { value: None } }";
+        let expected_deref = "MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } }";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -182,165 +182,144 @@ mod tests {
 #[cfg(test)]
 pub(super) mod mock {
     use super::super::{ifname::IfName, ifreq};
-    use super::{Sys, SIOCGIFLLADDR, SIOCSIFLLADDR};
+    use super::Sys;
     use crate::LinkLevelAddress;
     use libc::{c_int, c_ulong, c_void};
-    use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
+    use std::clone::Clone;
+    use std::{any::Any, cell::RefCell, cmp::PartialEq, fmt::Debug, rc::Rc};
 
-    #[derive(Copy, Clone, Debug)]
-    pub(crate) enum Then {
-        Success(c_int),
-        Error(c_int),
+    #[derive(Default)]
+    pub struct Mock {
+        store: Vec<Box<dyn Any>>,
     }
 
-    impl Default for Then {
-        fn default() -> Self {
-            Then::Success(0)
+    impl Debug for Mock {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("MockStore").finish_non_exhaustive()
         }
     }
 
-    impl From<Then> for c_int {
-        fn from(value: Then) -> Self {
-            match value {
-                Then::Success(value) => value,
-                Then::Error(_) => -1,
+    impl Mock {
+        pub fn on<T: Any + Clone>(&mut self, value: T) {
+            self.store.insert(0, Box::new(value));
+        }
+
+        pub fn get<T: Any + Clone>(&self) -> Result<T, &str> {
+            for item in self.store.iter() {
+                match item.downcast_ref::<T>() {
+                    Some(value) => return Ok(value.clone()),
+                    None => (),
+                };
             }
+            Err("Not found")
         }
     }
 
-    #[derive(Copy, Clone, Debug)]
-    struct Socket((c_int, c_int, c_int), Then);
+    #[derive(Clone, Copy)]
+    pub(crate) struct Socket(
+        pub(crate) (c_int, c_int, c_int),
+        pub(crate) (Option<c_int>, Option<c_int>),
+    );
 
-    #[derive(Copy, Clone, Debug)]
-    struct IoCtl((c_int, c_ulong), Then);
+    #[derive(Clone, Copy)]
+    pub(crate) struct IoCtl(
+        pub(crate) (c_int, c_ulong, IfName, Option<LinkLevelAddress>),
+        pub(crate) (Option<c_int>, Option<LinkLevelAddress>),
+    );
 
-    #[derive(Copy, Clone, Debug)]
-    struct Close((c_int,), Then);
-
-    #[derive(Debug)]
-    pub(crate) enum When {
-        Socket((c_int, c_int, c_int), Then),
-        IoCtl((c_int, c_ulong), Then),
-        Close((c_int,), Then),
-    }
-
-    type KeyValue = RefCell<HashMap<IfName, LinkLevelAddress>>;
+    #[derive(Clone, Copy)]
+    pub(crate) struct Close(pub(crate) (c_int,), pub(crate) (Option<c_int>,));
 
     #[derive(Clone, Debug, Default)]
     pub(crate) struct MockSys {
-        kv: Rc<KeyValue>,
-        when_socket: RefCell<Option<Socket>>,
-        when_ioctl: RefCell<Option<IoCtl>>,
-        when_close: RefCell<Option<Close>>,
         then_errno: RefCell<Option<c_int>>,
+        mock: Rc<RefCell<Mock>>,
     }
 
     impl MockSys {
-        pub(crate) fn when(self, when: When) -> Self {
-            match when {
-                When::Socket(params, then) => {
-                    *self.when_socket.borrow_mut() = Some(Socket(params, then))
-                }
-                When::IoCtl(params, then) => {
-                    *self.when_ioctl.borrow_mut() = Some(IoCtl(params, then))
-                }
-                When::Close(params, then) => {
-                    *self.when_close.borrow_mut() = Some(Close(params, then))
-                }
-            }
+        pub(crate) fn on<T: Any + Clone>(self, value: T) -> Self {
+            (*self.mock).borrow_mut().on(value);
             self
         }
 
-        pub(crate) fn with_nic(self, ifname: IfName, lladdr: LinkLevelAddress) -> Self {
-            self.kv.borrow_mut().insert(ifname, lladdr);
-            self
-        }
-
-        pub(crate) fn has_nic(&self, ifname: &IfName, expected_lladdr: &LinkLevelAddress) -> bool {
-            match self.kv.borrow().get(ifname) {
-                Some(lladdr) => lladdr == expected_lladdr,
-                None => false,
+        fn handle_errno(&self, errno: &Option<c_int>) -> c_int {
+            match errno {
+                Some(errno) => {
+                    *self.then_errno.borrow_mut() = Some(*errno);
+                    -1
+                }
+                None => {
+                    *self.then_errno.borrow_mut() = None;
+                    0
+                }
             }
         }
+    }
 
-        fn handle_then(&self, then: Then) -> Then {
-            if let Then::Error(errno) = then {
-                *self.then_errno.borrow_mut() = Some(errno)
-            }
-            then
+    fn matches<'a, T: Debug + PartialEq, U>(lhs: T, rhs: T, ret: U) -> U {
+        if lhs != rhs {
+            panic!("Error: {:?} not match {:?}", rhs, lhs)
         }
+        ret
     }
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-            eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol})");
+            let socket_args = (domain, ty, protocol);
+            let mock = (*self.mock).borrow();
+            let (fd, errno) = match mock.get::<Socket>() {
+                Ok(Socket(args, ret)) => matches(args, socket_args, ret),
+                Err(err) => panic!("Error: {}", err),
+            };
 
-            self.when_socket
-                .borrow()
-                .filter(|Socket(when, _)| when == &(domain, ty, protocol))
-                .map(|Socket(_, then)| self.handle_then(then))
-                .unwrap_or_default()
-                .into()
+            let ret = match fd {
+                Some(fd) => fd,
+                None => return self.handle_errno(&errno),
+            };
+            eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol}) -> (ret={ret}, errno={errno:?})");
+            ret
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
             let ifreq = ifreq::from_mut_ptr(arg);
             let ifname = ifreq::get_name(ifreq);
+            let lladdr_in = ifreq::get_lladdr(ifreq);
 
-            match request {
-                SIOCGIFLLADDR => match self.kv.borrow().get(&ifname) {
-                    Some(lladdr) => {
-                        eprintln!("MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, ifname={ifname}) -> lladd={lladdr}");
-                        ifreq::set_lladdr(ifreq, lladdr);
-                        0
-                    }
-                    None => {
-                        eprintln!("ERROR: MockSys.ioctl(fd={fd}, request=SIOCGIFLLADDR, ifname={ifname}) -> lladd=none");
-                        self.when_ioctl
-                            .borrow()
-                            .filter(|IoCtl(when, _)| when == &(fd, request))
-                            .map(|IoCtl(_, then)| self.handle_then(then))
-                            .unwrap_or_default()
-                            .into()
-                    }
-                },
-                SIOCSIFLLADDR => {
-                    match self
-                        .when_ioctl
-                        .borrow()
-                        .filter(|IoCtl(when, _)| when == &(fd, request))
-                        .map(|IoCtl(_, then)| {
-                            if let Then::Success(0) = then {
-                                let lladdr = ifreq::get_lladdr(ifreq);
-                                eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, ifname={ifname}, lladd={lladdr}) -> true");
-                                self.kv.borrow_mut().insert(ifname, lladdr);
-                            }
-                            self.handle_then(then)
-                        }) {
-                        Some(then) => then.into(),
-                        None => {
-                            let lladdr = ifreq::get_lladdr(ifreq);
-                            eprintln!("MockSys.ioctl(fd={fd}, request=SIOCSIFLLADDR, ifname={ifname}, lladd={lladdr}) -> true");
-                            self.kv.borrow_mut().insert(ifname, lladdr);
-                            0
-                        }
-                    }
-                }
-                request => {
-                    eprintln!("ERROR: MockSys.ioctl(fd={fd}, request={request}, ifname={ifname}) -> err='Invalid request value'");
-                    -1
-                }
+            let lladdr_in = if lladdr_in != "00:00:00:00:00:00".parse().unwrap() {
+                Some(lladdr_in)
+            } else {
+                None
+            };
+
+            let ioctl_args = (fd, request, ifname, lladdr_in);
+
+            let mock = (*self.mock).borrow();
+            let (errno, lladdr_out) = match mock.get::<IoCtl>() {
+                Ok(IoCtl(args, ret)) => matches(args, ioctl_args, ret),
+                Err(err) => panic!("Error: {}", err),
+            };
+
+            if let Some(lladdr) = lladdr_out {
+                ifreq::set_lladdr(ifreq, &lladdr);
             }
+
+            let ret = self.handle_errno(&errno);
+            eprintln!("MockSys.ioctl(fd={fd}, request={request}, ifname={ifname:?}, lladdr={lladdr_in:?}) -> (ret={ret}, errno={errno:?}, lladdr={lladdr_out:?})");
+            return ret;
         }
 
         fn close(&self, fd: c_int) -> c_int {
-            eprintln!("MockSys.close(fd={fd})");
-            self.when_close
-                .borrow()
-                .filter(|Close(when, _)| when == &(fd,))
-                .map(|Close(_, then)| self.handle_then(then))
-                .unwrap_or_default()
-                .into()
+            let close_args = (fd,);
+
+            let mock = (*self.mock).borrow();
+            let (errno,) = match mock.get::<Close>() {
+                Ok(Close(args, ret)) => matches(args, close_args, ret),
+                Err(err) => panic!("Error: {}", err),
+            };
+
+            let ret = self.handle_errno(&errno);
+            eprintln!("MockSys.close(fd={fd}) -> (ret={ret}, errno={errno:?})");
+            return ret;
         }
 
         fn errno(&self) -> c_int {

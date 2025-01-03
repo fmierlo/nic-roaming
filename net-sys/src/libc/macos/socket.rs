@@ -172,7 +172,9 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::sys::mock::{MockSys, Then, When};
+    use std::sync::LazyLock;
+
+    use super::super::sys::mock::{self, MockSys};
     use super::{ifreq, BoxSys, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
 
     impl<'a> LibcSocket {
@@ -180,6 +182,15 @@ mod tests {
             LibcSocket(BoxSys(Box::new(sys.clone())))
         }
     }
+
+    static IFNAME: LazyLock<IfName> = LazyLock::new(|| "enx".try_into().unwrap());
+    static LLADDR: LazyLock<LinkLevelAddress> =
+        LazyLock::new(|| "00:11:22:33:44:55".parse().unwrap());
+
+    const MOCK_FD: libc::c_int = 3;
+    const MOCK_SOCKET: mock::Socket =
+        mock::Socket((libc::AF_LOCAL, libc::SOCK_DGRAM, 0), (Some(MOCK_FD), None));
+    const MOCK_CLOSE: mock::Close = mock::Close((MOCK_FD,), (None,));
 
     #[test]
     fn test_socket_box_default() {
@@ -212,22 +223,23 @@ mod tests {
 
     #[test]
     fn test_open_socket_box_debug() {
-        let sys = &BoxSys(Box::new(MockSys::default()));
-        let expected_debug = "LibcOpenSocket { fd: 0, sys: BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: None }, when_ioctl: RefCell { value: None }, when_close: RefCell { value: None }, then_errno: RefCell { value: None } }) }";
+        let sys = &BoxSys(Box::new(MockSys::default().on(MOCK_CLOSE)));
+
+        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } }) }";
 
         let box_open_socket: Box<dyn super::OpenSocket> =
-            Box::new(super::LibcOpenSocket { fd: 0, sys });
+            Box::new(super::LibcOpenSocket { fd: MOCK_FD, sys });
 
         assert_eq!(format!("{:?}", box_open_socket), expected_debug);
     }
 
     #[test]
     fn test_socket_open_local_dgram() {
-        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys { kv: RefCell { value: {} }, when_socket: RefCell { value: Some(Socket((1, 2, 0), Success(10))) }, when_ioctl: RefCell { value: None }, when_close: RefCell { value: None }, then_errno: RefCell { value: None } }) }";
-        let sys = MockSys::default().when(When::Socket(
-            (libc::AF_LOCAL, libc::SOCK_DGRAM, 0),
-            Then::Success(10),
-        ));
+        let sys = MockSys::default()
+            .on(mock::Socket(MOCK_SOCKET.0, (Some(10), None)))
+            .on(mock::Close((10,), (None,)));
+
+        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } }) }";
         let socket = LibcSocket::new(&sys);
 
         let open_socket = socket.open_local_dgram().unwrap();
@@ -237,11 +249,9 @@ mod tests {
 
     #[test]
     fn test_socket_open_local_dgram_error() {
+        let sys = MockSys::default().on(mock::Socket(MOCK_SOCKET.0, (None, Some(libc::EPERM))));
+
         let expected_error = "Socket::OpenLocalDgramError { ret: -1, errno: 1, strerror: \"Operation not permitted\" }";
-        let sys = MockSys::default().when(When::Socket(
-            (libc::AF_LOCAL, libc::SOCK_DGRAM, 0),
-            Then::Error(libc::EPERM),
-        ));
         let socket = LibcSocket::new(&sys);
 
         let error = socket.open_local_dgram().unwrap_err();
@@ -252,36 +262,39 @@ mod tests {
 
     #[test]
     fn test_open_socket_get_lladdr() -> Result<()> {
-        let ifname: IfName = "enx".try_into()?;
-        let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
         let sys = MockSys::default()
-            .with_nic(ifname, expected_lladdr)
-            .when(When::IoCtl(
-                (0, super::sys::SIOCGIFLLADDR),
-                Then::Success(0),
-            ));
+            .on(MOCK_SOCKET)
+            .on(mock::IoCtl(
+                (MOCK_FD, super::sys::SIOCGIFLLADDR, *IFNAME, None),
+                (None, Some(*LLADDR)),
+            ))
+            .on(MOCK_CLOSE);
+
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &ifname);
+        ifreq::set_name(&mut ifreq, &IFNAME);
 
         LibcSocket::new(&sys)
             .open_local_dgram()?
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))
             .unwrap();
 
-        assert_eq!(ifreq::get_lladdr(&ifreq), expected_lladdr);
+        assert_eq!(ifreq::get_lladdr(&ifreq), *LLADDR);
         Ok(())
     }
 
     #[test]
     fn test_open_socket_get_lladdr_error() -> Result<()> {
-        let ifname: IfName = "enx".try_into()?;
-        let expected_error = "Socket::GetLinkLevelAddressError { fd: 0, ifname: \"enx\", ret: -1, errno: 9, strerror: \"Bad file descriptor\" }";
-        let sys = MockSys::default().when(When::IoCtl(
-            (0, super::sys::SIOCGIFLLADDR),
-            Then::Error(libc::EBADF),
-        ));
+        let sys = MockSys::default()
+            .on(MOCK_SOCKET)
+            .on(mock::IoCtl(
+                (MOCK_FD, super::sys::SIOCGIFLLADDR, *IFNAME, None),
+                (Some(libc::EBADF), None),
+            ))
+            .on(MOCK_CLOSE);
+
+        let expected_error = "Socket::GetLinkLevelAddressError { fd: 3, ifname: \"enx\", ret: -1, errno: 9, strerror: \"Bad file descriptor\" }";
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &ifname);
+        ifreq::set_name(&mut ifreq, &IFNAME);
 
         let error = LibcSocket::new(&sys)
             .open_local_dgram()?
@@ -296,33 +309,39 @@ mod tests {
 
     #[test]
     fn test_open_socket_set_lladdr() -> Result<()> {
-        let ifname: IfName = "enx".try_into()?;
-        let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
-        let sys = MockSys::default();
+        let sys = MockSys::default()
+            .on(MOCK_SOCKET)
+            .on(mock::IoCtl(
+                (MOCK_FD, super::sys::SIOCSIFLLADDR, *IFNAME, Some(*LLADDR)),
+                (None, None),
+            ))
+            .on(MOCK_CLOSE);
+
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &ifname);
-        ifreq::set_lladdr(&mut ifreq, &lladdr);
+        ifreq::set_name(&mut ifreq, &IFNAME);
+        ifreq::set_lladdr(&mut ifreq, &LLADDR);
 
         LibcSocket::new(&sys)
             .open_local_dgram()?
             .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
 
-        assert!(sys.has_nic(&ifname, &lladdr));
         Ok(())
     }
 
     #[test]
     fn test_open_socket_set_lladdr_error() -> Result<()> {
-        let ifname: IfName = "enx".try_into()?;
-        let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse()?;
-        let expected_error = "Socket::SetLinkLevelAddressError { fd: 0, ifname: \"enx\", lladdr: \"00:11:22:33:44:55\", ret: -1, errno: 22, strerror: \"Invalid argument\" }";
-        let sys = MockSys::default().when(When::IoCtl(
-            (0, super::sys::SIOCSIFLLADDR),
-            Then::Error(libc::EINVAL),
-        ));
+        let sys = MockSys::default()
+            .on(MOCK_SOCKET)
+            .on(mock::IoCtl(
+                (MOCK_FD, super::sys::SIOCSIFLLADDR, *IFNAME, Some(*LLADDR)),
+                (Some(libc::EINVAL), None),
+            ))
+            .on(MOCK_CLOSE);
+
+        let expected_error = "Socket::SetLinkLevelAddressError { fd: 3, ifname: \"enx\", lladdr: \"00:11:22:33:44:55\", ret: -1, errno: 22, strerror: \"Invalid argument\" }";
         let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &ifname);
-        ifreq::set_lladdr(&mut ifreq, &lladdr);
+        ifreq::set_name(&mut ifreq, &IFNAME);
+        ifreq::set_lladdr(&mut ifreq, &LLADDR);
 
         let error = LibcSocket::new(&sys)
             .open_local_dgram()?
@@ -337,7 +356,8 @@ mod tests {
 
     #[test]
     fn test_open_socket_close() {
-        let sys = MockSys::default();
+        let sys = MockSys::default().on(MOCK_SOCKET).on(MOCK_CLOSE);
+
         let socket = LibcSocket::new(&sys);
 
         let open_socket = socket.open_local_dgram().unwrap();
@@ -347,7 +367,10 @@ mod tests {
 
     #[test]
     fn test_open_socket_close_error() {
-        let sys = MockSys::default().when(When::Close((0,), Then::Error(libc::EINTR)));
+        let sys = MockSys::default()
+            .on(MOCK_SOCKET)
+            .on(mock::Close(MOCK_CLOSE.0, (Some(libc::EINTR),)));
+
         let socket = LibcSocket::new(&sys);
 
         let open_socket = socket.open_local_dgram().unwrap();
