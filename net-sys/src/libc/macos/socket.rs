@@ -225,7 +225,7 @@ mod tests {
     fn test_open_socket_box_debug() {
         let sys = &BoxSys(Box::new(MockSys::default().on(MOCK_CLOSE)));
 
-        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } }) }";
+        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys { .. }) }";
 
         let box_open_socket: Box<dyn super::OpenSocket> =
             Box::new(super::LibcOpenSocket { fd: MOCK_FD, sys });
@@ -239,7 +239,7 @@ mod tests {
             .on(mock::Socket(MOCK_SOCKET.0, (Some(10), None)))
             .on(mock::Close((10,), (None,)));
 
-        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } }) }";
+        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys { .. }) }";
         let socket = LibcSocket::new(&sys);
 
         let open_socket = socket.open_local_dgram().unwrap();

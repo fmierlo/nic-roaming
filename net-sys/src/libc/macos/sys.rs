@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } })";
+        let expected_debug = "BoxSys(MockSys { .. })";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys { then_errno: RefCell { value: None }, mock: RefCell { value: MockStore { .. } } }";
+        let expected_deref = "MockSys { .. }";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -185,60 +185,105 @@ pub(super) mod mock {
     use super::Sys;
     use crate::LinkLevelAddress;
     use libc::{c_int, c_ulong, c_void};
+    use std::any::type_name;
     use std::clone::Clone;
-    use std::{any::Any, cell::RefCell, cmp::PartialEq, fmt::Debug, rc::Rc};
+    use std::fmt::Debug;
+    use std::ops::Deref;
+    use std::{any::Any, cell::RefCell, cmp::PartialEq, rc::Rc};
 
     #[derive(Default)]
-    pub struct Mock {
-        store: Vec<Box<dyn Any>>,
-    }
-
-    impl Debug for Mock {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("MockStore").finish_non_exhaustive()
-        }
+    pub(crate) struct Mock {
+        store: RefCell<Vec<(Box<dyn Any>, &'static str)>>,
     }
 
     impl Mock {
-        pub fn on<T: Any + Clone>(&mut self, value: T) {
-            self.store.insert(0, Box::new(value));
+        fn on<T: Any + Clone>(&self, value: T) {
+            self.store
+                .borrow_mut()
+                .insert(0, (Box::new(value), type_name::<T>()));
         }
 
-        pub fn get<T: Any + Clone>(&self) -> Result<T, &str> {
-            for item in self.store.iter() {
-                match item.downcast_ref::<T>() {
-                    Some(value) => return Ok(value.clone()),
-                    None => (),
-                };
+        pub fn next<T: Any + Clone>(&self) -> T {
+            let (next, next_type_name) = match self.store.borrow_mut().pop() {
+                Some(next) => next,
+                None => panic!(
+                    "{:?}: type not found, predicate list is empty",
+                    type_name::<T>()
+                ),
+            };
+
+            match next.downcast::<T>() {
+                Ok(next) => *next,
+                Err(_) => panic!(
+                    "{:?}: type not compatible with next value type {:?}",
+                    type_name::<T>(),
+                    next_type_name
+                ),
             }
-            Err("Not found")
+        }
+
+        pub fn assert_next<T, V, U, P>(&self, destructure: P) -> U
+        where
+            P: Fn(&T) -> (V, (&V, &U)),
+            T: Any + Clone,
+            V: Clone + PartialEq + Debug,
+            U: Clone,
+        {
+            let next = self.next();
+
+            let (lhs, (rhs, ret)) = destructure(&next);
+
+            if &lhs == rhs {
+                ret.clone()
+            } else {
+                panic!(
+                    "{:?}: type value {:?} don't match value {:?}",
+                    type_name::<T>(),
+                    lhs,
+                    rhs
+                )
+            }
         }
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub(crate) struct Socket(
         pub(crate) (c_int, c_int, c_int),
         pub(crate) (Option<c_int>, Option<c_int>),
     );
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub(crate) struct IoCtl(
         pub(crate) (c_int, c_ulong, IfName, Option<LinkLevelAddress>),
         pub(crate) (Option<c_int>, Option<LinkLevelAddress>),
     );
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub(crate) struct Close(pub(crate) (c_int,), pub(crate) (Option<c_int>,));
 
-    #[derive(Clone, Debug, Default)]
+    #[derive(Clone, Default)]
     pub(crate) struct MockSys {
         then_errno: RefCell<Option<c_int>>,
-        mock: Rc<RefCell<Mock>>,
+        mock: Rc<Mock>,
+    }
+
+    impl Deref for MockSys {
+        type Target = Rc<Mock>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.mock
+        }
+    }
+
+    impl Debug for MockSys {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("MockSys").finish_non_exhaustive()
+        }
     }
 
     impl MockSys {
         pub(crate) fn on<T: Any + Clone>(self, value: T) -> Self {
-            (*self.mock).borrow_mut().on(value);
+            self.mock.on(value);
             self
         }
 
@@ -256,26 +301,16 @@ pub(super) mod mock {
         }
     }
 
-    fn matches<'a, T: Debug + PartialEq, U>(lhs: T, rhs: T, ret: U) -> U {
-        if lhs != rhs {
-            panic!("Error: {:?} not match {:?}", rhs, lhs)
-        }
-        ret
-    }
-
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
             let socket_args = (domain, ty, protocol);
-            let mock = (*self.mock).borrow();
-            let (fd, errno) = match mock.get::<Socket>() {
-                Ok(Socket(args, ret)) => matches(args, socket_args, ret),
-                Err(err) => panic!("Error: {}", err),
-            };
+            let (fd, errno) = self.assert_next(|Socket(args, ret)| (socket_args, (args, ret)));
 
             let ret = match fd {
                 Some(fd) => fd,
                 None => return self.handle_errno(&errno),
             };
+
             eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol}) -> (ret={ret}, errno={errno:?})");
             ret
         }
@@ -292,12 +327,8 @@ pub(super) mod mock {
             };
 
             let ioctl_args = (fd, request, ifname, lladdr_in);
-
-            let mock = (*self.mock).borrow();
-            let (errno, lladdr_out) = match mock.get::<IoCtl>() {
-                Ok(IoCtl(args, ret)) => matches(args, ioctl_args, ret),
-                Err(err) => panic!("Error: {}", err),
-            };
+            let (errno, lladdr_out) =
+                self.assert_next(|IoCtl(args, ret)| (ioctl_args, (args, ret)));
 
             if let Some(lladdr) = lladdr_out {
                 ifreq::set_lladdr(ifreq, &lladdr);
@@ -310,12 +341,7 @@ pub(super) mod mock {
 
         fn close(&self, fd: c_int) -> c_int {
             let close_args = (fd,);
-
-            let mock = (*self.mock).borrow();
-            let (errno,) = match mock.get::<Close>() {
-                Ok(Close(args, ret)) => matches(args, close_args, ret),
-                Err(err) => panic!("Error: {}", err),
-            };
+            let (errno,) = self.assert_next(|Close(args, ret)| (close_args, (args, ret)));
 
             let ret = self.handle_errno(&errno);
             eprintln!("MockSys.close(fd={fd}) -> (ret={ret}, errno={errno:?})");
