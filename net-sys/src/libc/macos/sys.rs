@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys { .. })";
+        let expected_debug = "BoxSys(MockSys())";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys { .. }";
+        let expected_deref = "MockSys()";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -191,20 +191,31 @@ pub(super) mod mock {
     use std::ops::Deref;
     use std::{any::Any, cell::RefCell, cmp::PartialEq, rc::Rc};
 
-    #[derive(Default)]
-    pub(crate) struct Mock {
-        store: RefCell<Vec<(Box<dyn Any>, &'static str)>>,
+    #[derive(Default, Clone)]
+    pub(crate) struct Mock(Rc<RefCell<Vec<(Box<dyn Any>, &'static str)>>>);
+
+    impl Deref for Mock {
+        type Target = RefCell<Vec<(Box<dyn Any>, &'static str)>>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl Debug for Mock {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("")
+        }
     }
 
     impl Mock {
         fn on<T: Any + Clone>(&self, value: T) {
-            self.store
-                .borrow_mut()
+            self.borrow_mut()
                 .insert(0, (Box::new(value), type_name::<T>()));
         }
 
-        pub fn next<T: Any + Clone>(&self) -> T {
-            let (next, next_type_name) = match self.store.borrow_mut().pop() {
+        fn next<T: Any + Clone>(&self) -> T {
+            let (next, next_type_name) = match self.borrow_mut().pop() {
                 Some(next) => next,
                 None => panic!(
                     "{:?}: type not found, predicate list is empty",
@@ -215,14 +226,14 @@ pub(super) mod mock {
             match next.downcast::<T>() {
                 Ok(next) => *next,
                 Err(_) => panic!(
-                    "{:?}: type not compatible with next value type {:?}",
+                    "{:?}: type not compatible with {:?}",
                     type_name::<T>(),
                     next_type_name
                 ),
             }
         }
 
-        pub fn assert_next<T, V, U, P>(&self, destructure: P) -> U
+        fn assert_next<T, V, U, P>(&self, destructure: P) -> U
         where
             P: Fn(&T) -> (V, (&V, &U)),
             T: Any + Clone,
@@ -261,28 +272,20 @@ pub(super) mod mock {
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct ErrNo(pub(crate) (), pub(crate) (c_int,));
 
-    #[derive(Clone, Default)]
-    pub(crate) struct MockSys {
-        mock: Rc<Mock>,
-    }
+    #[derive(Clone, Default, Debug)]
+    pub(crate) struct MockSys(Mock);
 
     impl Deref for MockSys {
-        type Target = Rc<Mock>;
+        type Target = Mock;
 
         fn deref(&self) -> &Self::Target {
-            &self.mock
-        }
-    }
-
-    impl Debug for MockSys {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("MockSys").finish_non_exhaustive()
+            &self.0
         }
     }
 
     impl MockSys {
         pub(crate) fn on<T: Any + Clone>(self, value: T) -> Self {
-            self.mock.on(value);
+            (*self).on(value);
             self
         }
     }
