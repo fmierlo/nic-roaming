@@ -233,18 +233,19 @@ pub(super) mod mock {
             }
         }
 
-        fn assert_next<T, V, U, P>(&self, destructure: P) -> U
+        fn assert<T, V, U, P>(&self, destructure: P) -> U
         where
             P: Fn(&T) -> (V, (&V, &U)),
             T: Any + Clone,
             V: Clone + PartialEq + Debug,
-            U: Clone,
+            U: Clone + Debug,
         {
             let next = self.next();
 
             let (lhs, (rhs, ret)) = destructure(&next);
 
             if &lhs == rhs {
+                eprintln!("{}({lhs:?}) -> ret={ret:?}", type_name::<T>());
                 ret.clone()
             } else {
                 panic!(
@@ -258,7 +259,7 @@ pub(super) mod mock {
     }
 
     #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Socket(pub(crate) (c_int, c_int, c_int), pub(crate) (c_int,));
+    pub(crate) struct Socket(pub(crate) (c_int, c_int, c_int), pub(crate) c_int);
 
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct IoCtl(
@@ -267,10 +268,10 @@ pub(super) mod mock {
     );
 
     #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Close(pub(crate) (c_int,), pub(crate) (c_int,));
+    pub(crate) struct Close(pub(crate) (c_int,), pub(crate) c_int);
 
     #[derive(Clone, Copy, Debug)]
-    pub(crate) struct ErrNo(pub(crate) (), pub(crate) (c_int,));
+    pub(crate) struct ErrNo(pub(crate) (), pub(crate) c_int);
 
     #[derive(Clone, Default, Debug)]
     pub(crate) struct MockSys(Mock);
@@ -292,10 +293,7 @@ pub(super) mod mock {
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-            let socket_args = (domain, ty, protocol);
-            let (ret,) = self.assert_next(|Socket(args, ret)| (socket_args, (args, ret)));
-            eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol}) -> ret={ret}");
-            ret
+            self.assert(|Socket(args, ret)| ((domain, ty, protocol), (args, ret)))
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
@@ -310,28 +308,21 @@ pub(super) mod mock {
             };
 
             let ioctl_args = (fd, request, ifname, lladdr_in);
-            let (ret, lladdr_out) = self.assert_next(|IoCtl(args, ret)| (ioctl_args, (args, ret)));
+            let (ret, lladdr_out) = self.assert(|IoCtl(args, ret)| (ioctl_args, (args, ret)));
 
             if let Some(lladdr) = lladdr_out {
                 ifreq::set_lladdr(ifreq, &lladdr);
             }
 
-            eprintln!("MockSys.ioctl(fd={fd}, request={request}, ifname={ifname:?}, lladdr={lladdr_in:?}) -> (ret={ret}, lladdr={lladdr_out:?})");
             ret
         }
 
         fn close(&self, fd: c_int) -> c_int {
-            let close_args = (fd,);
-            let (ret,) = self.assert_next(|Close(args, ret)| (close_args, (args, ret)));
-            eprintln!("MockSys.close(fd={fd}) -> ret={ret}");
-            ret
+            self.assert(|Close(args, ret)| ((fd,), (args, ret)))
         }
 
         fn errno(&self) -> c_int {
-            let errno_args = ();
-            let (ret,) = self.assert_next(|ErrNo(args, ret)| (errno_args, (args, ret)));
-            eprintln!("MockSys.errno() -> ret={ret}");
-            ret
+            self.assert(|ErrNo(args, ret)| ((), (args, ret)))
         }
     }
 }
