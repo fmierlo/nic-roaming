@@ -187,10 +187,12 @@ mod tests {
     static LLADDR: LazyLock<LinkLevelAddress> =
         LazyLock::new(|| "00:11:22:33:44:55".parse().unwrap());
 
+    const MOCK_SUCCESS: libc::c_int = 0;
+    const MOCK_FAILURE: libc::c_int = -1;
     const MOCK_FD: libc::c_int = 3;
     const MOCK_SOCKET: mock::Socket =
-        mock::Socket((libc::AF_LOCAL, libc::SOCK_DGRAM, 0), (Some(MOCK_FD), None));
-    const MOCK_CLOSE: mock::Close = mock::Close((MOCK_FD,), (None,));
+        mock::Socket((libc::AF_LOCAL, libc::SOCK_DGRAM, 0), (MOCK_FD,));
+    const MOCK_CLOSE: mock::Close = mock::Close((MOCK_FD,), (MOCK_SUCCESS,));
 
     #[test]
     fn test_socket_box_default() {
@@ -236,8 +238,8 @@ mod tests {
     #[test]
     fn test_socket_open_local_dgram() {
         let sys = MockSys::default()
-            .on(mock::Socket(MOCK_SOCKET.0, (Some(10), None)))
-            .on(mock::Close((10,), (None,)));
+            .on(mock::Socket(MOCK_SOCKET.0, (10,)))
+            .on(mock::Close((10,), (MOCK_SUCCESS,)));
 
         let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys { .. }) }";
         let socket = LibcSocket::new(&sys);
@@ -249,7 +251,9 @@ mod tests {
 
     #[test]
     fn test_socket_open_local_dgram_error() {
-        let sys = MockSys::default().on(mock::Socket(MOCK_SOCKET.0, (None, Some(libc::EPERM))));
+        let sys = MockSys::default()
+            .on(mock::Socket(MOCK_SOCKET.0, (MOCK_FAILURE,)))
+            .on(mock::ErrNo((), (libc::EPERM,)));
 
         let expected_error = "Socket::OpenLocalDgramError { ret: -1, errno: 1, strerror: \"Operation not permitted\" }";
         let socket = LibcSocket::new(&sys);
@@ -266,7 +270,7 @@ mod tests {
             .on(MOCK_SOCKET)
             .on(mock::IoCtl(
                 (MOCK_FD, super::sys::SIOCGIFLLADDR, *IFNAME, None),
-                (None, Some(*LLADDR)),
+                (MOCK_SUCCESS, Some(*LLADDR)),
             ))
             .on(MOCK_CLOSE);
 
@@ -288,8 +292,9 @@ mod tests {
             .on(MOCK_SOCKET)
             .on(mock::IoCtl(
                 (MOCK_FD, super::sys::SIOCGIFLLADDR, *IFNAME, None),
-                (Some(libc::EBADF), None),
+                (MOCK_FAILURE, None),
             ))
+            .on(mock::ErrNo((), (libc::EBADF,)))
             .on(MOCK_CLOSE);
 
         let expected_error = "Socket::GetLinkLevelAddressError { fd: 3, ifname: \"enx\", ret: -1, errno: 9, strerror: \"Bad file descriptor\" }";
@@ -313,7 +318,7 @@ mod tests {
             .on(MOCK_SOCKET)
             .on(mock::IoCtl(
                 (MOCK_FD, super::sys::SIOCSIFLLADDR, *IFNAME, Some(*LLADDR)),
-                (None, None),
+                (MOCK_SUCCESS, None),
             ))
             .on(MOCK_CLOSE);
 
@@ -334,8 +339,9 @@ mod tests {
             .on(MOCK_SOCKET)
             .on(mock::IoCtl(
                 (MOCK_FD, super::sys::SIOCSIFLLADDR, *IFNAME, Some(*LLADDR)),
-                (Some(libc::EINVAL), None),
+                (MOCK_FAILURE, None),
             ))
+            .on(mock::ErrNo((), (libc::EINVAL,)))
             .on(MOCK_CLOSE);
 
         let expected_error = "Socket::SetLinkLevelAddressError { fd: 3, ifname: \"enx\", lladdr: \"00:11:22:33:44:55\", ret: -1, errno: 22, strerror: \"Invalid argument\" }";
@@ -369,7 +375,8 @@ mod tests {
     fn test_open_socket_close_error() {
         let sys = MockSys::default()
             .on(MOCK_SOCKET)
-            .on(mock::Close(MOCK_CLOSE.0, (Some(libc::EINTR),)));
+            .on(mock::Close(MOCK_CLOSE.0, (MOCK_FAILURE,)))
+            .on(mock::ErrNo((), (libc::EINTR,)));
 
         let socket = LibcSocket::new(&sys);
 

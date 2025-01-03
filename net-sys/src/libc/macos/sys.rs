@@ -247,23 +247,22 @@ pub(super) mod mock {
     }
 
     #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Socket(
-        pub(crate) (c_int, c_int, c_int),
-        pub(crate) (Option<c_int>, Option<c_int>),
-    );
+    pub(crate) struct Socket(pub(crate) (c_int, c_int, c_int), pub(crate) (c_int,));
 
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct IoCtl(
         pub(crate) (c_int, c_ulong, IfName, Option<LinkLevelAddress>),
-        pub(crate) (Option<c_int>, Option<LinkLevelAddress>),
+        pub(crate) (c_int, Option<LinkLevelAddress>),
     );
 
     #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Close(pub(crate) (c_int,), pub(crate) (Option<c_int>,));
+    pub(crate) struct Close(pub(crate) (c_int,), pub(crate) (c_int,));
+
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct ErrNo(pub(crate) (), pub(crate) (c_int,));
 
     #[derive(Clone, Default)]
     pub(crate) struct MockSys {
-        then_errno: RefCell<Option<c_int>>,
         mock: Rc<Mock>,
     }
 
@@ -286,32 +285,13 @@ pub(super) mod mock {
             self.mock.on(value);
             self
         }
-
-        fn handle_errno(&self, errno: &Option<c_int>) -> c_int {
-            match errno {
-                Some(errno) => {
-                    *self.then_errno.borrow_mut() = Some(*errno);
-                    -1
-                }
-                None => {
-                    *self.then_errno.borrow_mut() = None;
-                    0
-                }
-            }
-        }
     }
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
             let socket_args = (domain, ty, protocol);
-            let (fd, errno) = self.assert_next(|Socket(args, ret)| (socket_args, (args, ret)));
-
-            let ret = match fd {
-                Some(fd) => fd,
-                None => return self.handle_errno(&errno),
-            };
-
-            eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol}) -> (ret={ret}, errno={errno:?})");
+            let (ret,) = self.assert_next(|Socket(args, ret)| (socket_args, (args, ret)));
+            eprintln!("MockSys.socket(domain={domain}, ty={ty}, protocol={protocol}) -> ret={ret}");
             ret
         }
 
@@ -327,29 +307,28 @@ pub(super) mod mock {
             };
 
             let ioctl_args = (fd, request, ifname, lladdr_in);
-            let (errno, lladdr_out) =
-                self.assert_next(|IoCtl(args, ret)| (ioctl_args, (args, ret)));
+            let (ret, lladdr_out) = self.assert_next(|IoCtl(args, ret)| (ioctl_args, (args, ret)));
 
             if let Some(lladdr) = lladdr_out {
                 ifreq::set_lladdr(ifreq, &lladdr);
             }
 
-            let ret = self.handle_errno(&errno);
-            eprintln!("MockSys.ioctl(fd={fd}, request={request}, ifname={ifname:?}, lladdr={lladdr_in:?}) -> (ret={ret}, errno={errno:?}, lladdr={lladdr_out:?})");
-            return ret;
+            eprintln!("MockSys.ioctl(fd={fd}, request={request}, ifname={ifname:?}, lladdr={lladdr_in:?}) -> (ret={ret}, lladdr={lladdr_out:?})");
+            ret
         }
 
         fn close(&self, fd: c_int) -> c_int {
             let close_args = (fd,);
-            let (errno,) = self.assert_next(|Close(args, ret)| (close_args, (args, ret)));
-
-            let ret = self.handle_errno(&errno);
-            eprintln!("MockSys.close(fd={fd}) -> (ret={ret}, errno={errno:?})");
-            return ret;
+            let (ret,) = self.assert_next(|Close(args, ret)| (close_args, (args, ret)));
+            eprintln!("MockSys.close(fd={fd}) -> ret={ret}");
+            ret
         }
 
         fn errno(&self) -> c_int {
-            (*self.then_errno.borrow()).unwrap()
+            let errno_args = ();
+            let (ret,) = self.assert_next(|ErrNo(args, ret)| (errno_args, (args, ret)));
+            eprintln!("MockSys.errno() -> ret={ret}");
+            ret
         }
     }
 }
