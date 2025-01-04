@@ -249,20 +249,20 @@ pub(super) mod mock {
     fn get_ioctl_input(arg: *mut c_void) -> (IfName, Option<LinkLevelAddress>) {
         let ifreq = ifreq::from_mut_ptr(arg);
         let ifname = ifreq::get_name(ifreq);
-        let lladdr_in = ifreq::get_lladdr(ifreq);
+        let lladdr = ifreq::get_lladdr(ifreq);
 
-        let lladdr_in = if lladdr_in != "00:00:00:00:00:00".parse().unwrap() {
-            Some(lladdr_in)
+        let lladdr = if lladdr != "00:00:00:00:00:00".parse().unwrap() {
+            Some(lladdr)
         } else {
             None
         };
 
-        (ifname, lladdr_in)
+        (ifname, lladdr)
     }
 
-    fn set_ioctl_output(arg: *mut c_void, lladdr_out: Option<LinkLevelAddress>) {
+    fn set_ioctl_output(arg: *mut c_void, lladdr: Option<LinkLevelAddress>) {
         let ifreq = ifreq::from_mut_ptr(arg);
-        if let Some(lladdr) = lladdr_out {
+        if let Some(lladdr) = lladdr {
             ifreq::set_lladdr(ifreq, &lladdr);
         }
     }
