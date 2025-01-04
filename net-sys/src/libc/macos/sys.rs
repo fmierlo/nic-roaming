@@ -186,7 +186,7 @@ pub(super) mod mock {
     use crate::mockup::Mock;
     use crate::LinkLevelAddress;
     use libc::{c_int, c_ulong, c_void};
-    use std::{any::Any, clone::Clone, fmt::Debug, ops::Deref};
+    use std::{any::Any, clone::Clone, fmt::Debug};
 
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Socket(pub(crate) (c_int, c_int, c_int), pub(crate) c_int);
