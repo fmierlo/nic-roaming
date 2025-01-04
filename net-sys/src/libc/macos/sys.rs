@@ -261,8 +261,8 @@ pub(super) mod mock {
     }
 
     fn set_ioctl_output(arg: *mut c_void, lladdr: Option<LinkLevelAddress>) {
-        let ifreq = ifreq::from_mut_ptr(arg);
         if let Some(lladdr) = lladdr {
+            let ifreq = ifreq::from_mut_ptr(arg);
             ifreq::set_lladdr(ifreq, &lladdr);
         }
     }
