@@ -183,7 +183,7 @@ mod tests {
 pub(super) mod mock {
     use super::super::{ifname::IfName, ifreq};
     use super::Sys;
-    use crate::mockup::Mock;
+    use crate::mockup::{Mockup, OnMockup};
     use crate::LinkLevelAddress;
     use libc::{c_int, c_ulong, c_void};
     use std::{any::Any, clone::Clone, fmt::Debug};
@@ -205,11 +205,11 @@ pub(super) mod mock {
 
     #[derive(Clone, Default, Debug)]
     pub(crate) struct MockSys {
-        mock: Mock,
+        mock: Mockup,
     }
 
-    impl MockSys {
-        pub(crate) fn on<T: Any + Clone>(self, value: T) -> Self {
+    impl OnMockup for MockSys {
+        fn on<T: Any + Clone>(self, value: T) -> Self {
             self.mock.on(value);
             self
         }

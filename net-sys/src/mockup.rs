@@ -1,10 +1,14 @@
 use std::{any::type_name, fmt::Debug, ops::Deref};
 use std::{any::Any, cell::RefCell, cmp::PartialEq, rc::Rc};
 
-#[derive(Default, Clone)]
-pub struct Mock(Rc<RefCell<Vec<(Box<dyn Any>, &'static str)>>>);
+pub trait OnMockup {
+    fn on<T: Any + Clone>(self, value: T) -> Self;
+}
 
-impl Deref for Mock {
+#[derive(Default, Clone)]
+pub struct Mockup(Rc<RefCell<Vec<(Box<dyn Any>, &'static str)>>>);
+
+impl Deref for Mockup {
     type Target = RefCell<Vec<(Box<dyn Any>, &'static str)>>;
 
     fn deref(&self) -> &Self::Target {
@@ -12,13 +16,13 @@ impl Deref for Mock {
     }
 }
 
-impl Debug for Mock {
+impl Debug for Mockup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Mock").finish()
     }
 }
 
-impl Mock {
+impl Mockup {
     pub fn on<T: Any + Clone>(&self, value: T) {
         self.borrow_mut()
             .insert(0, (Box::new(value), type_name::<T>()));

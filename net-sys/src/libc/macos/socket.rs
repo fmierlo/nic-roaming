@@ -172,10 +172,10 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::LazyLock;
-
     use super::super::sys::mock::{self, MockSys};
     use super::{ifreq, BoxSys, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
+    use crate::mockup::OnMockup;
+    use std::sync::LazyLock;
 
     impl<'a> LibcSocket {
         fn new(sys: &MockSys) -> LibcSocket {
