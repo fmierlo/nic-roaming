@@ -227,22 +227,12 @@ pub(super) mod mock {
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-            let ifreq = ifreq::from_mut_ptr(arg);
-            let ifname = ifreq::get_name(ifreq);
-            let lladdr_in = ifreq::get_lladdr(ifreq);
-
-            let lladdr_in = if lladdr_in != "00:00:00:00:00:00".parse().unwrap() {
-                Some(lladdr_in)
-            } else {
-                None
-            };
+            let (ifname, lladdr_in) = get_ioctl_input(arg);
 
             let ioctl_args = (fd, request, ifname, lladdr_in);
             let (ret, lladdr_out) = self.assert(|IoCtl(args, ret)| (ioctl_args, (args, ret)));
 
-            if let Some(lladdr) = lladdr_out {
-                ifreq::set_lladdr(ifreq, &lladdr);
-            }
+            set_ioctl_output(arg, lladdr_out);
 
             ret
         }
@@ -253,6 +243,27 @@ pub(super) mod mock {
 
         fn errno(&self) -> c_int {
             self.assert(|ErrNo(args, ret)| ((), (args, ret)))
+        }
+    }
+
+    fn get_ioctl_input(arg: *mut c_void) -> (IfName, Option<LinkLevelAddress>) {
+        let ifreq = ifreq::from_mut_ptr(arg);
+        let ifname = ifreq::get_name(ifreq);
+        let lladdr_in = ifreq::get_lladdr(ifreq);
+
+        let lladdr_in = if lladdr_in != "00:00:00:00:00:00".parse().unwrap() {
+            Some(lladdr_in)
+        } else {
+            None
+        };
+
+        (ifname, lladdr_in)
+    }
+
+    fn set_ioctl_output(arg: *mut c_void, lladdr_out: Option<LinkLevelAddress>) {
+        let ifreq = ifreq::from_mut_ptr(arg);
+        if let Some(lladdr) = lladdr_out {
+            ifreq::set_lladdr(ifreq, &lladdr);
         }
     }
 }

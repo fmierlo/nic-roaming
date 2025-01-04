@@ -190,8 +190,7 @@ mod tests {
     const MOCK_SUCCESS: libc::c_int = 0;
     const MOCK_FAILURE: libc::c_int = -1;
     const MOCK_FD: libc::c_int = 3;
-    const MOCK_SOCKET: mock::Socket =
-        mock::Socket((libc::AF_LOCAL, libc::SOCK_DGRAM, 0), MOCK_FD);
+    const MOCK_SOCKET: mock::Socket = mock::Socket((libc::AF_LOCAL, libc::SOCK_DGRAM, 0), MOCK_FD);
     const MOCK_CLOSE: mock::Close = mock::Close((MOCK_FD,), MOCK_SUCCESS);
 
     #[test]
