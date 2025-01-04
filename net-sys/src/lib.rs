@@ -4,6 +4,9 @@ compile_error!("Unsupported system!");
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 compile_error!("Unsupported target os!");
 
+#[cfg(test)]
+mod mockup;
+
 mod lladdr;
 
 #[cfg_attr(feature = "libc", path = "libc")]
