@@ -226,7 +226,7 @@ mod tests {
     fn test_open_socket_box_debug() {
         let sys = &BoxSys(Box::new(MockSys::default().on(MOCK_CLOSE)));
 
-        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys()) }";
+        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys { mock: Mock }) }";
 
         let box_open_socket: Box<dyn super::OpenSocket> =
             Box::new(super::LibcOpenSocket { fd: MOCK_FD, sys });
@@ -240,7 +240,7 @@ mod tests {
             .on(mock::Socket(MOCK_SOCKET.0, 10))
             .on(mock::Close((10,), MOCK_SUCCESS));
 
-        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys()) }";
+        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys { mock: Mock }) }";
         let socket = LibcSocket::new(&sys);
 
         let open_socket = socket.open_local_dgram().unwrap();

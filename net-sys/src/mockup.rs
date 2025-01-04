@@ -14,7 +14,7 @@ impl Deref for Mock {
 
 impl Debug for Mock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("")
+        f.debug_tuple("Mock").finish()
     }
 }
 

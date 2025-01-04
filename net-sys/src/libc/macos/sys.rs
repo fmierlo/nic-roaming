@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys())";
+        let expected_debug = "BoxSys(MockSys { mock: Mock })";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys()";
+        let expected_deref = "MockSys { mock: Mock }";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -204,33 +204,29 @@ pub(super) mod mock {
     pub(crate) struct ErrNo(pub(crate) (), pub(crate) c_int);
 
     #[derive(Clone, Default, Debug)]
-    pub(crate) struct MockSys(Mock);
-
-    impl Deref for MockSys {
-        type Target = Mock;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
+    pub(crate) struct MockSys {
+        mock: Mock,
     }
 
     impl MockSys {
         pub(crate) fn on<T: Any + Clone>(self, value: T) -> Self {
-            (*self).on(value);
+            self.mock.on(value);
             self
         }
     }
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-            self.assert(|Socket(args, ret)| ((domain, ty, protocol), (args, ret)))
+            self.mock
+                .assert(|Socket(args, ret)| ((domain, ty, protocol), (args, ret)))
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
             let (ifname, lladdr_in) = get_ioctl_input(arg);
 
-            let ioctl_args = (fd, request, ifname, lladdr_in);
-            let (ret, lladdr_out) = self.assert(|IoCtl(args, ret)| (ioctl_args, (args, ret)));
+            let (ret, lladdr_out) = self
+                .mock
+                .assert(|IoCtl(args, ret)| ((fd, request, ifname, lladdr_in), (args, ret)));
 
             set_ioctl_output(arg, lladdr_out);
 
@@ -238,11 +234,11 @@ pub(super) mod mock {
         }
 
         fn close(&self, fd: c_int) -> c_int {
-            self.assert(|Close(args, ret)| ((fd,), (args, ret)))
+            self.mock.assert(|Close(args, ret)| ((fd,), (args, ret)))
         }
 
         fn errno(&self) -> c_int {
-            self.assert(|ErrNo(args, ret)| ((), (args, ret)))
+            self.mock.assert(|ErrNo(args, ret)| ((), (args, ret)))
         }
     }
 
