@@ -6,6 +6,9 @@ edition = "2021"
 [dependencies]
 libc = { version = "0.2", optional = true }
 
+[dev-dependencies]
+mocklib = { path = "../mocklib" }
+
 [features]
 default = [ "libc" ]
 libc = [ "dep:libc" ]

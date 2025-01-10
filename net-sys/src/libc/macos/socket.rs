@@ -174,10 +174,10 @@ impl<'a> Drop for LibcOpenSocket<'a> {
 mod tests {
     use super::super::sys::mock::{self, MockSys};
     use super::{ifreq, BoxSys, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
-    use crate::mockup::OnMockup;
+    use mocklib::MockExpect;
     use std::sync::LazyLock;
 
-    impl<'a> LibcSocket {
+    impl LibcSocket {
         fn new(sys: &MockSys) -> LibcSocket {
             LibcSocket(BoxSys(Box::new(sys.clone())))
         }
@@ -187,11 +187,29 @@ mod tests {
     static LLADDR: LazyLock<LinkLevelAddress> =
         LazyLock::new(|| "00:11:22:33:44:55".parse().unwrap());
 
-    const MOCK_SUCCESS: libc::c_int = 0;
-    const MOCK_FAILURE: libc::c_int = -1;
     const MOCK_FD: libc::c_int = 3;
-    const MOCK_SOCKET: mock::Socket = mock::Socket((libc::AF_LOCAL, libc::SOCK_DGRAM, 0), MOCK_FD);
-    const MOCK_CLOSE: mock::Close = mock::Close((MOCK_FD,), MOCK_SUCCESS);
+
+    const RETURN_FD: mock::Return = mock::Return(MOCK_FD);
+    const RETURN_SUCCESS: mock::Return = mock::Return(0);
+    const RETURN_FAILURE: mock::Return = mock::Return(-1);
+
+    const MOCK_SOCKET: mock::Socket = mock::Socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0);
+    const MOCK_CLOSE: mock::Close = mock::Close(MOCK_FD);
+
+    fn ifreq_get_name(arg: *mut libc::c_void) -> IfName {
+        let ifreq = ifreq::from_mut_ptr(arg);
+        ifreq::get_name(ifreq)
+    }
+
+    fn ifreq_get_lladdr(arg: *mut libc::c_void) -> LinkLevelAddress {
+        let ifreq = ifreq::from_mut_ptr(arg);
+        ifreq::get_lladdr(ifreq)
+    }
+
+    fn ifreq_set_lladdr(arg: *mut libc::c_void, lladdr: LinkLevelAddress) {
+        let ifreq = ifreq::from_mut_ptr(arg);
+        ifreq::set_lladdr(ifreq, &lladdr);
+    }
 
     #[test]
     fn test_socket_box_default() {
@@ -224,9 +242,11 @@ mod tests {
 
     #[test]
     fn test_open_socket_box_debug() {
-        let sys = &BoxSys(Box::new(MockSys::default().on(MOCK_CLOSE)));
+        let sys = &BoxSys(Box::new(
+            MockSys::default().expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_SUCCESS)),
+        ));
 
-        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys { mock: Mock }) }";
+        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys()) }";
 
         let box_open_socket: Box<dyn super::OpenSocket> =
             Box::new(super::LibcOpenSocket { fd: MOCK_FD, sys });
@@ -237,10 +257,10 @@ mod tests {
     #[test]
     fn test_socket_open_local_dgram() {
         let sys = MockSys::default()
-            .on(mock::Socket(MOCK_SOCKET.0, 10))
-            .on(mock::Close((10,), MOCK_SUCCESS));
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || mock::Return(10)))
+            .expect((|args| assert_eq!(mock::Close(10), args), || RETURN_SUCCESS));
 
-        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys { mock: Mock }) }";
+        let expected_open_socket = "LibcOpenSocket { fd: 10, sys: BoxSys(MockSys()) }";
         let socket = LibcSocket::new(&sys);
 
         let open_socket = socket.open_local_dgram().unwrap();
@@ -251,8 +271,8 @@ mod tests {
     #[test]
     fn test_socket_open_local_dgram_error() {
         let sys = MockSys::default()
-            .on(mock::Socket(MOCK_SOCKET.0, MOCK_FAILURE))
-            .on(mock::ErrNo((), libc::EPERM));
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || RETURN_FAILURE))
+            .expect((|_: mock::ErrNo| assert!(true), || mock::Return(libc::EPERM)));
 
         let expected_error = "Socket::OpenLocalDgramError { ret: -1, errno: 1, strerror: \"Operation not permitted\" }";
         let socket = LibcSocket::new(&sys);
@@ -266,12 +286,16 @@ mod tests {
     #[test]
     fn test_open_socket_get_lladdr() -> Result<()> {
         let sys = MockSys::default()
-            .on(MOCK_SOCKET)
-            .on(mock::IoCtl(
-                (MOCK_FD, super::sys::SIOCGIFLLADDR, *IFNAME, None),
-                (MOCK_SUCCESS, Some(*LLADDR)),
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || RETURN_FD))
+            .expect((
+                |mock::IoCtl(args, ifreq_ptr)| {
+                    assert_eq!((MOCK_FD, super::sys::SIOCGIFLLADDR), args);
+                    assert_eq!(ifreq_get_name(ifreq_ptr), *IFNAME);
+                    ifreq_set_lladdr(ifreq_ptr, *LLADDR);
+                },
+                || RETURN_SUCCESS,
             ))
-            .on(MOCK_CLOSE);
+            .expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_SUCCESS));
 
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &IFNAME);
@@ -288,13 +312,16 @@ mod tests {
     #[test]
     fn test_open_socket_get_lladdr_error() -> Result<()> {
         let sys = MockSys::default()
-            .on(MOCK_SOCKET)
-            .on(mock::IoCtl(
-                (MOCK_FD, super::sys::SIOCGIFLLADDR, *IFNAME, None),
-                (MOCK_FAILURE, None),
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || RETURN_FD))
+            .expect((
+                |mock::IoCtl(args, ifreq_ptr)| {
+                    assert_eq!((MOCK_FD, super::sys::SIOCGIFLLADDR), args);
+                    assert_eq!(ifreq_get_name(ifreq_ptr), *IFNAME);
+                },
+                || RETURN_FAILURE,
             ))
-            .on(mock::ErrNo((), libc::EBADF))
-            .on(MOCK_CLOSE);
+            .expect((|_: mock::ErrNo| assert!(true), || mock::Return(libc::EBADF)))
+            .expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_SUCCESS));
 
         let expected_error = "Socket::GetLinkLevelAddressError { fd: 3, ifname: \"enx\", ret: -1, errno: 9, strerror: \"Bad file descriptor\" }";
         let mut ifreq = ifreq::new();
@@ -314,12 +341,16 @@ mod tests {
     #[test]
     fn test_open_socket_set_lladdr() -> Result<()> {
         let sys = MockSys::default()
-            .on(MOCK_SOCKET)
-            .on(mock::IoCtl(
-                (MOCK_FD, super::sys::SIOCSIFLLADDR, *IFNAME, Some(*LLADDR)),
-                (MOCK_SUCCESS, None),
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || RETURN_FD))
+            .expect((
+                |mock::IoCtl(args, ifreq_ptr)| {
+                    assert_eq!((MOCK_FD, super::sys::SIOCSIFLLADDR), args);
+                    assert_eq!(ifreq_get_name(ifreq_ptr), *IFNAME);
+                    assert_eq!(ifreq_get_lladdr(ifreq_ptr), *LLADDR);
+                },
+                || RETURN_SUCCESS,
             ))
-            .on(MOCK_CLOSE);
+            .expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_SUCCESS));
 
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &IFNAME);
@@ -335,13 +366,20 @@ mod tests {
     #[test]
     fn test_open_socket_set_lladdr_error() -> Result<()> {
         let sys = MockSys::default()
-            .on(MOCK_SOCKET)
-            .on(mock::IoCtl(
-                (MOCK_FD, super::sys::SIOCSIFLLADDR, *IFNAME, Some(*LLADDR)),
-                (MOCK_FAILURE, None),
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || RETURN_FD))
+            .expect((
+                |mock::IoCtl(args, ifreq_ptr)| {
+                    assert_eq!((MOCK_FD, super::sys::SIOCSIFLLADDR), args);
+                    assert_eq!(ifreq_get_name(ifreq_ptr), *IFNAME);
+                    assert_eq!(ifreq_get_lladdr(ifreq_ptr), *LLADDR);
+                },
+                || RETURN_FAILURE,
             ))
-            .on(mock::ErrNo((), libc::EINVAL))
-            .on(MOCK_CLOSE);
+            .expect((
+                |_: mock::ErrNo| assert!(true),
+                || mock::Return(libc::EINVAL),
+            ))
+            .expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_SUCCESS));
 
         let expected_error = "Socket::SetLinkLevelAddressError { fd: 3, ifname: \"enx\", lladdr: \"00:11:22:33:44:55\", ret: -1, errno: 22, strerror: \"Invalid argument\" }";
         let mut ifreq = ifreq::new();
@@ -361,7 +399,9 @@ mod tests {
 
     #[test]
     fn test_open_socket_close() {
-        let sys = MockSys::default().on(MOCK_SOCKET).on(MOCK_CLOSE);
+        let sys = MockSys::default()
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || RETURN_FD))
+            .expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_SUCCESS));
 
         let socket = LibcSocket::new(&sys);
 
@@ -373,9 +413,9 @@ mod tests {
     #[test]
     fn test_open_socket_close_error() {
         let sys = MockSys::default()
-            .on(MOCK_SOCKET)
-            .on(mock::Close(MOCK_CLOSE.0, MOCK_FAILURE))
-            .on(mock::ErrNo((), libc::EINTR));
+            .expect((|args| assert_eq!(MOCK_SOCKET, args), || RETURN_FD))
+            .expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_FAILURE))
+            .expect((|_: mock::ErrNo| assert!(true), || mock::Return(libc::EINTR)));
 
         let socket = LibcSocket::new(&sys);
 

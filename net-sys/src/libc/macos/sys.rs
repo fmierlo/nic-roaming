@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys { mock: Mock })";
+        let expected_debug = "BoxSys(MockSys())";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys { mock: Mock }";
+        let expected_deref = "MockSys()";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -181,85 +181,58 @@ mod tests {
 
 #[cfg(test)]
 pub(super) mod mock {
-    use super::super::{ifname::IfName, ifreq};
     use super::Sys;
-    use crate::mockup::{Mockup, OnMockup};
-    use crate::LinkLevelAddress;
+    use mocklib::{Mock, MockExpect};
     use libc::{c_int, c_ulong, c_void};
-    use std::{any::Any, clone::Clone, fmt::Debug};
+    use std::{clone::Clone, fmt::Debug};
 
-    #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Socket(pub(crate) (c_int, c_int, c_int), pub(crate) c_int);
+    #[derive(Debug, PartialEq)]
+    pub(crate) struct Socket(pub libc::c_int, pub libc::c_int, pub libc::c_int);
+    #[derive(Debug, PartialEq)]
+    pub(crate) struct IoCtl(pub (libc::c_int, libc::c_ulong), pub *mut libc::c_void);
+    #[derive(Debug, PartialEq)]
+    pub(crate) struct Close(pub libc::c_int);
+    #[derive(Debug, PartialEq)]
+    pub(crate) struct ErrNo();
+    #[derive(Debug, PartialEq)]
+    pub(crate) struct Return(pub libc::c_int);
 
-    #[derive(Clone, Copy, Debug)]
-    pub(crate) struct IoCtl(
-        pub(crate) (c_int, c_ulong, IfName, Option<LinkLevelAddress>),
-        pub(crate) (c_int, Option<LinkLevelAddress>),
-    );
+    #[derive(Clone, Debug, Default)]
+    pub(crate) struct MockSys(Mock);
 
-    #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Close(pub(crate) (c_int,), pub(crate) c_int);
-
-    #[derive(Clone, Copy, Debug)]
-    pub(crate) struct ErrNo(pub(crate) (), pub(crate) c_int);
-
-    #[derive(Clone, Default, Debug)]
-    pub(crate) struct MockSys {
-        mock: Mockup,
-    }
-
-    impl OnMockup for MockSys {
-        fn on<T: Any + Clone>(self, value: T) -> Self {
-            self.mock.on(value);
-            self
+    impl MockExpect for MockSys {
+        fn mock(&self) -> &Mock {
+            &self.0
         }
     }
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-            self.mock
-                .assert(|Socket(args, ret)| ((domain, ty, protocol), (args, ret)))
+            self.mock()
+                .on_mock(Socket(domain, ty, protocol))
+                .map(|Return(value)| value)
+                .unwrap()
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-            let (ifname, lladdr_in) = get_ioctl_input(arg);
-
-            let (ret, lladdr_out) = self
-                .mock
-                .assert(|IoCtl(args, ret)| ((fd, request, ifname, lladdr_in), (args, ret)));
-
-            set_ioctl_output(arg, lladdr_out);
-
-            ret
+            self.mock()
+                .on_mock(IoCtl((fd, request), arg))
+                .map(|Return(value)| value)
+                .unwrap()
         }
 
         fn close(&self, fd: c_int) -> c_int {
-            self.mock.assert(|Close(args, ret)| ((fd,), (args, ret)))
+            self.mock()
+                .on_mock(Close(fd))
+                .map(|Return(value)| value)
+                .unwrap()
         }
 
         fn errno(&self) -> c_int {
-            self.mock.assert(|ErrNo(args, ret)| ((), (args, ret)))
-        }
-    }
-
-    fn get_ioctl_input(arg: *mut c_void) -> (IfName, Option<LinkLevelAddress>) {
-        let ifreq = ifreq::from_mut_ptr(arg);
-        let ifname = ifreq::get_name(ifreq);
-        let lladdr = ifreq::get_lladdr(ifreq);
-
-        let lladdr = if lladdr != "00:00:00:00:00:00".parse().unwrap() {
-            Some(lladdr)
-        } else {
-            None
-        };
-
-        (ifname, lladdr)
-    }
-
-    fn set_ioctl_output(arg: *mut c_void, lladdr: Option<LinkLevelAddress>) {
-        if let Some(lladdr) = lladdr {
-            let ifreq = ifreq::from_mut_ptr(arg);
-            ifreq::set_lladdr(ifreq, &lladdr);
+            self.mock()
+                .on_mock(ErrNo())
+                .map(|Return(value)| value)
+                .unwrap()
         }
     }
 }
