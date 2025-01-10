@@ -76,14 +76,14 @@ fn on_drop(store: &MockStore) {
     }
 }
 
+fn expect<T: Any, U: Any>(store: &MockStore, expect: (fn(T), fn() -> U)) {
+    add_expect(store, new_expect(expect));
+}
+
 pub fn on_mock<T: Any + Debug, U: Any>(store: &MockStore, args: T) -> Result<U, String> {
     let expect = next_expect(store).ok_or(format!(
         "args type mismatch: expecting nothing, received value {args:?}"
     ))?;
 
     mock(&expect, args)
-}
-
-fn expect<T: Any, U: Any>(store: &MockStore, expect: (fn(T), fn() -> U)) {
-    add_expect(store, new_expect(expect));
 }

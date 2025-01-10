@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_sys_box_debug() {
         let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys())";
+        let expected_debug = "BoxSys(MockSys)";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn test_sys_box_deref() {
         let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys()";
+        let expected_deref = "MockSys";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 
@@ -182,9 +182,9 @@ mod tests {
 #[cfg(test)]
 pub(super) mod mock {
     use super::Sys;
-    use mocklib::{Mock, MockExpect};
     use libc::{c_int, c_ulong, c_void};
-    use std::{clone::Clone, fmt::Debug};
+    use mocklib::{Mock, MockStore};
+    use std::fmt::Debug;
 
     #[derive(Debug, PartialEq)]
     pub(crate) struct Socket(pub libc::c_int, pub libc::c_int, pub libc::c_int);
@@ -192,47 +192,43 @@ pub(super) mod mock {
     pub(crate) struct IoCtl(pub (libc::c_int, libc::c_ulong), pub *mut libc::c_void);
     #[derive(Debug, PartialEq)]
     pub(crate) struct Close(pub libc::c_int);
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug)]
     pub(crate) struct ErrNo();
-    #[derive(Debug, PartialEq)]
-    pub(crate) struct Return(pub libc::c_int);
 
-    #[derive(Clone, Debug, Default)]
-    pub(crate) struct MockSys(Mock);
+    #[derive(Clone, Default)]
+    pub(crate) struct MockSys(MockStore);
 
-    impl MockExpect for MockSys {
-        fn mock(&self) -> &Mock {
+    impl Debug for MockSys {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_tuple("MockSys").finish()
+        }
+    }
+
+    impl Mock for MockSys {
+        fn store(&self) -> &MockStore {
             &self.0
         }
     }
 
     impl Sys for MockSys {
         fn socket(&self, domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-            self.mock()
-                .on_mock(Socket(domain, ty, protocol))
-                .map(|Return(value)| value)
-                .unwrap()
+            let args = Socket(domain, ty, protocol);
+            self.on_mock(args).unwrap()
         }
 
         fn ioctl(&self, fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-            self.mock()
-                .on_mock(IoCtl((fd, request), arg))
-                .map(|Return(value)| value)
-                .unwrap()
+            let args = IoCtl((fd, request), arg);
+            self.on_mock(args).unwrap()
         }
 
         fn close(&self, fd: c_int) -> c_int {
-            self.mock()
-                .on_mock(Close(fd))
-                .map(|Return(value)| value)
-                .unwrap()
+            let args = Close(fd);
+            self.on_mock(args).unwrap()
         }
 
         fn errno(&self) -> c_int {
-            self.mock()
-                .on_mock(ErrNo())
-                .map(|Return(value)| value)
-                .unwrap()
+            let args = ErrNo();
+            self.on_mock(args).unwrap()
         }
     }
 }

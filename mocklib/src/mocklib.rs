@@ -75,24 +75,7 @@ impl MockStore {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct Mock(MockStore);
-
-impl Deref for Mock {
-    type Target = MockStore;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Debug for Mock {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "")
-    }
-}
-
-impl Drop for Mock {
+impl Drop for MockStore {
     fn drop(&mut self) {
         if !self.is_empty() {
             panic!("pending expects: {:?}", self.0)
@@ -100,24 +83,26 @@ impl Drop for Mock {
     }
 }
 
-impl Mock {
-    pub fn on_mock<T: Any + Debug, U: Any>(&self, args: T) -> Result<U, String> {
-        let expect = self.next_expect().ok_or(format!(
+pub trait Mock
+where
+    Self: Sized,
+{
+    fn store(&self) -> &MockStore;
+
+    fn expect<T: Any, U: Any>(self, expect: (fn(T), fn() -> U)) -> Self {
+        self.store().add_expect(Expect::new(expect));
+        self
+    }
+
+    fn on_mock<T, U>(&self, args: T) -> Result<U, String>
+    where
+        T: Any + Debug,
+        U: Any,
+    {
+        let expect = self.store().next_expect().ok_or(format!(
             "args type mismatch: expecting nothing, received value {args:?}"
         ))?;
 
         expect.mock(args)
-    }
-}
-
-pub trait MockExpect
-where
-    Self: Sized,
-{
-    fn mock(&self) -> &Mock;
-
-    fn expect<T: Any, U: Any>(self, expect: (fn(T), fn() -> U)) -> Self {
-        self.mock().add_expect(Expect::new(expect));
-        self
     }
 }
