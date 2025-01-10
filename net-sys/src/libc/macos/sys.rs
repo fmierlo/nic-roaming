@@ -160,8 +160,8 @@ mod tests {
 
     #[test]
     fn test_sys_box_debug() {
-        let sys = super::mock::MockSys::default();
-        let expected_debug = "BoxSys(MockSys)";
+        let sys = super::LibcSys::default();
+        let expected_debug = "BoxSys(LibcSys)";
 
         let box_sys = super::BoxSys(Box::new(sys));
 
@@ -170,8 +170,8 @@ mod tests {
 
     #[test]
     fn test_sys_box_deref() {
-        let sys = super::mock::MockSys::default();
-        let expected_deref = "MockSys";
+        let sys = super::LibcSys::default();
+        let expected_deref = "LibcSys";
 
         let deref_box_sys = &*super::BoxSys(Box::new(sys));
 

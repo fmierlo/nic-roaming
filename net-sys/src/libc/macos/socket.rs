@@ -222,8 +222,8 @@ mod tests {
 
     #[test]
     fn test_socket_box_debug() {
-        let socket = super::mock::MockSocket::default();
-        let expected_debug = "BoxSocket(MockSocket { kv: RefCell { value: {} } })";
+        let socket = super::LibcSocket::default();
+        let expected_debug = "BoxSocket(LibcSocket(BoxSys(LibcSys)))";
 
         let box_socket = super::BoxSocket(Box::new(socket));
 
@@ -232,8 +232,8 @@ mod tests {
 
     #[test]
     fn test_socket_box_deref() {
-        let socket = super::mock::MockSocket::default();
-        let expected_deref = "MockSocket { kv: RefCell { value: {} } }";
+        let socket = super::LibcSocket::default();
+        let expected_deref = "LibcSocket(BoxSys(LibcSys))";
 
         let deref_box_socket = &*super::BoxSocket(Box::new(socket));
 
@@ -242,11 +242,8 @@ mod tests {
 
     #[test]
     fn test_open_socket_box_debug() {
-        let sys = &BoxSys(Box::new(
-            MockSys::default().expect((|args| assert_eq!(MOCK_CLOSE, args), || RETURN_SUCCESS)),
-        ));
-
-        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(MockSys) }";
+        let sys = &BoxSys::default();
+        let expected_debug = "LibcOpenSocket { fd: 3, sys: BoxSys(LibcSys) }";
 
         let box_open_socket: Box<dyn super::OpenSocket> =
             Box::new(super::LibcOpenSocket { fd: MOCK_FD, sys });
