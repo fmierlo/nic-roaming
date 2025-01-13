@@ -33,9 +33,12 @@ impl Nic {
 
 #[cfg(test)]
 mod tests {
-    use super::super::socket::mock::MockSocket;
     use super::{BoxSocket, IfName, Nic};
-    use crate::LinkLevelAddress;
+    use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
+    use crate::sys::os::socket::mock::{self, ErrNo, MockSocket};
+    use crate::{LinkLevelAddress, Result};
+    use mockdown::Mockdown;
+    use std::sync::LazyLock;
 
     impl Nic {
         fn new(socket: &MockSocket) -> Nic {
@@ -44,6 +47,10 @@ mod tests {
             }
         }
     }
+
+    static IFNAME: LazyLock<IfName> = LazyLock::new(|| "enx".try_into().unwrap());
+    static LLADDR: LazyLock<LinkLevelAddress> =
+        LazyLock::new(|| "00:11:22:33:44:55".parse().unwrap());
 
     #[test]
     fn test_nic_default() {
@@ -56,24 +63,35 @@ mod tests {
 
     #[test]
     fn test_get_lladd() {
-        let ifname: IfName = "enx".try_into().unwrap();
-        let expected_lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse().unwrap();
-        let socket = MockSocket::default().with_nic(ifname, expected_lladdr);
+        let socket = MockSocket::default()
+            .expect(|mock::OpenLocalDgram()| {
+                assert!(true);
+                ErrNo::None
+            })
+            .expect(|mock::GetLLAddr(ifreq)| {
+                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
+                ifreq_set_lladdr(ifreq, *LLADDR);
+                Result::Ok(())
+            });
 
-        let lladdr = Nic::new(&socket).get_lladd(&ifname).unwrap();
+        let lladdr = Nic::new(&socket).get_lladd(&IFNAME).unwrap();
 
-        assert_eq!(lladdr, expected_lladdr);
+        assert_eq!(lladdr, *LLADDR);
     }
 
     #[test]
     fn test_set_lladd() {
-        let ifname: IfName = "enx".try_into().unwrap();
-        let lladdr: LinkLevelAddress = "00:11:22:33:44:55".parse().unwrap();
+        let socket = MockSocket::default()
+            .expect(|mock::OpenLocalDgram()| {
+                assert!(true);
+                ErrNo::None
+            })
+            .expect(|mock::SetLLAddr(ifreq)| {
+                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
+                assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
+                Result::Ok(())
+            });
 
-        let socket = MockSocket::default();
-
-        Nic::new(&socket).set_lladd(&ifname, &lladdr).unwrap();
-
-        assert!(socket.has_nic(&ifname, &lladdr));
+        Nic::new(&socket).set_lladd(&IFNAME, &LLADDR).unwrap();
     }
 }

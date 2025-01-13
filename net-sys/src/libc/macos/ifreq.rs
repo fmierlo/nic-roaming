@@ -177,3 +177,25 @@ mod tests {
         assert_eq!(*lladdr, LLADDR);
     }
 }
+
+#[cfg(test)]
+pub(super) mod mock {
+    use crate::{IfName, LinkLevelAddress};
+
+    use super::{from_mut_ptr, get_lladdr, get_name, set_lladdr};
+
+    pub(crate) fn ifreq_get_name(arg: *mut libc::c_void) -> IfName {
+        let ifreq = from_mut_ptr(arg);
+        get_name(ifreq)
+    }
+
+    pub(crate) fn ifreq_get_lladdr(arg: *mut libc::c_void) -> LinkLevelAddress {
+        let ifreq = from_mut_ptr(arg);
+        get_lladdr(ifreq)
+    }
+
+    pub(crate) fn ifreq_set_lladdr(arg: *mut libc::c_void, lladdr: LinkLevelAddress) {
+        let ifreq = from_mut_ptr(arg);
+        set_lladdr(ifreq, &lladdr);
+    }
+}

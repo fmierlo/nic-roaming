@@ -183,7 +183,7 @@ mod tests {
 pub(super) mod mock {
     use super::Sys;
     use libc::{c_int, c_ulong, c_void};
-    use mocklib::{Mock, MockStore};
+    use mockdown::{Mockdown, ExpectStore};
     use std::fmt::Debug;
 
     #[derive(Debug, PartialEq)]
@@ -196,7 +196,7 @@ pub(super) mod mock {
     pub(crate) struct ErrNo();
 
     #[derive(Clone, Default)]
-    pub(crate) struct MockSys(MockStore);
+    pub(crate) struct MockSys(ExpectStore);
 
     impl Debug for MockSys {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -204,8 +204,8 @@ pub(super) mod mock {
         }
     }
 
-    impl Mock for MockSys {
-        fn store(&self) -> &MockStore {
+    impl Mockdown for MockSys {
+        fn store(&self) -> &ExpectStore {
             &self.0
         }
     }
