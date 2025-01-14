@@ -124,14 +124,18 @@ where
     }
 }
 
-pub struct StaticMock<T: Mockdown>(LazyLock<T>);
+pub struct StaticMock<M: Mockdown>(LazyLock<M>);
 
-impl<T: Mockdown + Clone + Default> StaticMock<T> {
-    pub const fn new() -> StaticMock<T> {
+impl<M: Mockdown + Clone + Default> StaticMock<M> {
+    pub const fn new() -> StaticMock<M> {
         Self(LazyLock::new(|| Default::default()))
     }
 
-    pub fn static_mock(&self) -> T {
+    pub fn static_mock(&self) -> M {
         self.0.clone().clear()
+    }
+
+    pub fn on_mock<T: Any + Debug, U: Any>(&self, args: T) -> Result<U, String> {
+        self.0.on_mock(args)
     }
 }
