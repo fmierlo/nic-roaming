@@ -1,6 +1,7 @@
 use std::any::{type_name, Any};
+use std::default::Default;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 trait AsAny {
     fn as_any(self) -> Box<dyn Any>;
@@ -24,7 +25,7 @@ impl AsType for Box<dyn Any> {
     }
 }
 
-trait Expect {
+trait Expect: Send {
     fn mock(&self, when: Box<dyn Any>) -> Result<Box<dyn Any>, &'static str>;
     fn type_name(&self) -> &'static str;
 }
@@ -53,8 +54,14 @@ impl<T: Any, U: Any> Expect for fn(T) -> U {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct ExpectStore(Arc<Mutex<Vec<Box<dyn Expect>>>>);
+
+impl Clone for ExpectStore {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
 
 impl ExpectStore {
     fn add_expect<T: Any, U: Any>(&self, expect: fn(T) -> U) {
@@ -63,6 +70,10 @@ impl ExpectStore {
 
     fn next_expect(&self) -> Option<Box<dyn Expect>> {
         self.0.lock().unwrap().pop()
+    }
+
+    fn clear(&self) {
+        self.0.lock().unwrap().clear();
     }
 
     fn is_empty(&self) -> bool {
@@ -89,6 +100,11 @@ where
 {
     fn store(&self) -> &ExpectStore;
 
+    fn clear(self) -> Self {
+        self.store().clear();
+        self
+    }
+
     fn expect<T: Any, U: Any>(self, expect: fn(T) -> U) -> Self {
         self.store().add_expect(expect);
         self
@@ -105,5 +121,17 @@ where
             .map_err(|expect| type_error::<T, U>(expect))?;
 
         Ok(result)
+    }
+}
+
+pub struct StaticMock<T: Mockdown>(LazyLock<T>);
+
+impl<T: Mockdown + Clone + Default> StaticMock<T> {
+    pub const fn new() -> StaticMock<T> {
+        Self(LazyLock::new(|| Default::default()))
+    }
+
+    pub fn static_mock(&self) -> T {
+        self.0.clone().clear()
     }
 }
