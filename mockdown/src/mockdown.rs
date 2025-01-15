@@ -1,7 +1,9 @@
 use std::any::{type_name, Any};
+use std::collections::HashMap;
 use std::default::Default;
 use std::fmt::Debug;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
+use std::thread::{self, ThreadId};
 
 trait AsAny {
     fn as_any(self) -> Box<dyn Any>;
@@ -124,18 +126,27 @@ where
     }
 }
 
-pub struct StaticMock<M: Mockdown>(LazyLock<M>);
+pub struct StaticMock<M: Mockdown>(LazyLock<Arc<Mutex<HashMap<ThreadId, M>>>>);
 
 impl<M: Mockdown + Clone + Default> StaticMock<M> {
     pub const fn new() -> StaticMock<M> {
         Self(LazyLock::new(|| Default::default()))
     }
 
+    fn with(&self) -> (MutexGuard<'_, HashMap<ThreadId, M>>, ThreadId) {
+        (self.0.lock().unwrap(), thread::current().id())
+    }
+
     pub fn static_mock(&self) -> M {
-        self.0.clone().clear()
+        let (mut map, id) = self.with();
+        if !map.contains_key(&id) {
+            map.insert(id, M::default());
+        }
+        map.get(&id).unwrap().clone().clear()
     }
 
     pub fn on_mock<T: Any + Debug, U: Any>(&self, args: T) -> Result<U, String> {
-        self.0.on_mock(args)
+        let (map, id) = self.with();
+        map.get(&id).unwrap().on_mock(args)
     }
 }
