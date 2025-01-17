@@ -1,9 +1,61 @@
 use std::any::{type_name, Any};
-use std::collections::HashMap;
 use std::default::Default;
 use std::fmt::Debug;
-use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
-use std::thread::{self, ThreadId};
+use std::sync::{Arc, Mutex};
+
+pub mod thread_local {
+    use super::Mock;
+    use crate::Mockdown;
+    use std::{any::Any, cell::RefCell, fmt::Debug, thread::LocalKey};
+
+    thread_local! {
+        static THREAD_LOCAL: RefCell<Mock> = new();
+    }
+
+    pub fn new() -> RefCell<Mock> {
+        Default::default()
+    }
+
+    pub fn clear_expects<T: Any, U: Any>() -> &'static LocalKey<RefCell<Mock>> {
+        THREAD_LOCAL.with_borrow_mut(|mock| mock.clear_expects());
+        &THREAD_LOCAL
+    }
+
+    pub fn expect<T: Any, U: Any>(expect: fn(T) -> U) -> &'static LocalKey<RefCell<Mock>> {
+        THREAD_LOCAL.with_borrow_mut(|mock| mock.add_expect(expect));
+        &THREAD_LOCAL
+    }
+
+    pub fn mock<T: Any + Debug, U: Any>(args: T) -> Result<U, String> {
+        THREAD_LOCAL.with_borrow(|mock| mock.on_mock(args))
+    }
+}
+
+pub mod static_global {
+    use super::{Mock, Mockdown};
+    use std::sync::{Arc, LazyLock, Mutex};
+    use std::{any::Any, fmt::Debug};
+
+    static STATIC_GLOBAL: LazyLock<Arc<Mutex<Mock>>> = new();
+
+    pub const fn new() -> LazyLock<Arc<Mutex<Mock>>> {
+        LazyLock::new(|| Default::default())
+    }
+
+    pub fn clear_expects<T: Any, U: Any>() -> &'static LazyLock<Arc<Mutex<Mock>>> {
+        STATIC_GLOBAL.lock().unwrap().clear_expects();
+        &STATIC_GLOBAL
+    }
+
+    pub fn expect<T: Any, U: Any>(expect: fn(T) -> U) -> &'static LazyLock<Arc<Mutex<Mock>>> {
+        STATIC_GLOBAL.lock().unwrap().add_expect(expect);
+        &STATIC_GLOBAL
+    }
+
+    pub fn mock<T: Any + Debug, U: Any>(args: T) -> Result<U, String> {
+        STATIC_GLOBAL.lock().unwrap().on_mock(args)
+    }
+}
 
 trait AsAny {
     fn as_any(self) -> Box<dyn Any>;
@@ -96,20 +148,32 @@ fn type_error<T: Any + Debug, U: Any>(expect: &str) -> String {
     format!("expect type mismatch: expecting {expect:?}, received {received:?}")
 }
 
+#[derive(Clone, Default)]
+pub struct Mock(ExpectStore);
+
+impl Mockdown for Mock {
+    fn store(&self) -> &ExpectStore {
+        &self.0
+    }
+}
+
 pub trait Mockdown
 where
     Self: Sized,
 {
     fn store(&self) -> &ExpectStore;
 
-    fn clear(self) -> Self {
+    fn clear_expects(&self) {
         self.store().clear();
-        self
     }
 
     fn expect<T: Any, U: Any>(self, expect: fn(T) -> U) -> Self {
         self.store().add_expect(expect);
         self
+    }
+
+    fn add_expect<T: Any, U: Any>(&self, expect: fn(T) -> U) {
+        self.store().add_expect(expect);
     }
 
     fn on_mock<T: Any + Debug, U: Any>(&self, args: T) -> Result<U, String> {
@@ -123,30 +187,5 @@ where
             .map_err(|expect| type_error::<T, U>(expect))?;
 
         Ok(result)
-    }
-}
-
-pub struct StaticMock<M: Mockdown>(LazyLock<Arc<Mutex<HashMap<ThreadId, M>>>>);
-
-impl<M: Mockdown + Clone + Default> StaticMock<M> {
-    pub const fn new() -> StaticMock<M> {
-        Self(LazyLock::new(|| Default::default()))
-    }
-
-    fn with(&self) -> (MutexGuard<'_, HashMap<ThreadId, M>>, ThreadId) {
-        (self.0.lock().unwrap(), thread::current().id())
-    }
-
-    pub fn static_mock(&self) -> M {
-        let (mut map, id) = self.with();
-        if !map.contains_key(&id) {
-            map.insert(id, M::default());
-        }
-        map.get(&id).unwrap().clone().clear()
-    }
-
-    pub fn on_mock<T: Any + Debug, U: Any>(&self, args: T) -> Result<U, String> {
-        let (map, id) = self.with();
-        map.get(&id).unwrap().on_mock(args)
     }
 }

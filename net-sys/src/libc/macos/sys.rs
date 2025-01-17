@@ -183,7 +183,7 @@ mod tests {
 pub(super) mod mock {
     use super::Sys;
     use libc::{c_int, c_ulong, c_void};
-    use mockdown::{Mockdown, ExpectStore};
+    use mockdown::{ExpectStore, Mockdown};
     use std::fmt::Debug;
 
     #[derive(Debug, PartialEq)]
