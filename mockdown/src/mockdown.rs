@@ -1,7 +1,20 @@
 use std::any::{type_name, Any};
+use std::cell::RefCell;
 use std::default::Default;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
+use std::thread::LocalKey;
+
+pub trait ThreadLocal {
+    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self;
+}
+
+impl ThreadLocal for LocalKey<RefCell<Mock>> {
+    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
+        self.with_borrow_mut(|mock| mock.add_expect(expect));
+        self
+    }
+}
 
 pub mod thread_local {
     use super::Mock;
@@ -16,18 +29,16 @@ pub mod thread_local {
         Default::default()
     }
 
-    pub fn clear_expects<T: Any, U: Any>() -> &'static LocalKey<RefCell<Mock>> {
+    pub fn mock() -> &'static LocalKey<RefCell<Mock>> {
         THREAD_LOCAL.with_borrow_mut(|mock| mock.clear_expects());
         &THREAD_LOCAL
     }
 
-    pub fn expect<T: Any, U: Any>(expect: fn(T) -> U) -> &'static LocalKey<RefCell<Mock>> {
-        THREAD_LOCAL.with_borrow_mut(|mock| mock.add_expect(expect));
-        &THREAD_LOCAL
-    }
-
-    pub fn mock<T: Any + Debug, U: Any>(args: T) -> Result<U, String> {
-        THREAD_LOCAL.with_borrow(|mock| mock.on_mock(args))
+    pub fn on_mock<T: Any + Debug, U: Any>(args: T) -> Result<U, String> {
+        let mock = THREAD_LOCAL.take();
+        let result = mock.on_mock(args);
+        THREAD_LOCAL.set(mock);
+        result
     }
 }
 
@@ -177,14 +188,15 @@ where
     }
 
     fn on_mock<T: Any + Debug, U: Any>(&self, args: T) -> Result<U, String> {
-        let expect = self
-            .store()
-            .next_expect()
-            .ok_or_else(|| type_error::<T, U>("nothing"))?;
+        let expect = self.store().next_expect().ok_or_else(|| {
+            self.clear_expects();
+            type_error::<T, U>("nothing")
+        })?;
 
-        let result = expect
-            .on_mock(args)
-            .map_err(|expect| type_error::<T, U>(expect))?;
+        let result = expect.on_mock(args).map_err(|expect| {
+            self.clear_expects();
+            type_error::<T, U>(expect)
+        })?;
 
         Ok(result)
     }

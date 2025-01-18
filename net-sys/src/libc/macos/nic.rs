@@ -35,9 +35,9 @@ impl Nic {
 mod tests {
     use super::{BoxSocket, IfName, Nic};
     use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-    use crate::sys::os::socket::mock::{self, ErrNo, MockSocket};
+    use crate::sys::os::socket::mock::{self, mock, ErrNo, MockSocket};
     use crate::{LinkLevelAddress, Result};
-    use mockdown::Mockdown;
+    use mockdown::ThreadLocal;
     use std::sync::LazyLock;
 
     impl Nic {
@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn test_nic_default() {
-        let expected_default = "Nic { socket: BoxSocket(LibcSocket(BoxSys(LibcSys))) }";
+        let expected_default = "Nic { socket: BoxSocket(LibcSocket) }";
 
         let nic = super::Nic::default();
 
@@ -63,7 +63,7 @@ mod tests {
 
     #[test]
     fn test_get_lladd() {
-        let socket = MockSocket::default()
+        mock()
             .expect(|mock::OpenLocalDgram()| {
                 assert!(true);
                 ErrNo::None
@@ -74,6 +74,7 @@ mod tests {
                 Result::Ok(())
             });
 
+        let socket = MockSocket::default();
         let lladdr = Nic::new(&socket).get_lladd(&IFNAME).unwrap();
 
         assert_eq!(lladdr, *LLADDR);
@@ -81,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_set_lladd() {
-        let socket = MockSocket::default()
+        mock()
             .expect(|mock::OpenLocalDgram()| {
                 assert!(true);
                 ErrNo::None
@@ -92,6 +93,7 @@ mod tests {
                 Result::Ok(())
             });
 
+        let socket = MockSocket::default();
         Nic::new(&socket).set_lladd(&IFNAME, &LLADDR).unwrap();
     }
 }
