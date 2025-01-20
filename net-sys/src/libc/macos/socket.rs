@@ -465,7 +465,7 @@ pub(super) mod mock {
     impl Socket for MockSocket {
         fn open_local_dgram(&self) -> SocketResult {
             let args = OpenLocalDgram();
-            let on_mock: ErrNo = mockdown().mock(args).unwrap();
+            let on_mock: ErrNo = MOCKDOWN.mock(args).unwrap();
             match on_mock {
                 None => Ok(Box::new(MockOpenSocket())),
                 Some(errno) => Err(Error::OpenLocalDgram(-1, errno).into()),
@@ -479,12 +479,12 @@ pub(super) mod mock {
     impl OpenSocket for MockOpenSocket {
         fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let args = GetLLAddr(arg);
-            mockdown().mock(args).unwrap()
+            MOCKDOWN.mock(args).unwrap()
         }
 
         fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let args = SetLLAddr(arg);
-            mockdown().mock(args).unwrap()
+            MOCKDOWN.mock(args).unwrap()
         }
     }
 }

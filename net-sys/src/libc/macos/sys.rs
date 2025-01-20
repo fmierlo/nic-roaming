@@ -105,22 +105,22 @@ pub(crate) mod mock {
 
     pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
         let args = Socket(domain, ty, protocol);
-        mockdown().mock(args).unwrap()
+        MOCKDOWN.mock(args).unwrap()
     }
 
     pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
         let args = IoCtl((fd, request), arg);
-        mockdown().mock(args).unwrap()
+        MOCKDOWN.mock(args).unwrap()
     }
 
     pub(crate) fn close(fd: c_int) -> c_int {
         let args = Close(fd);
-        mockdown().mock(args).unwrap()
+        MOCKDOWN.mock(args).unwrap()
     }
 
     pub(crate) fn errno() -> c_int {
         let args = ErrNo();
-        mockdown().mock(args).unwrap()
+        MOCKDOWN.mock(args).unwrap()
     }
 }
 
