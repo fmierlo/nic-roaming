@@ -13,6 +13,7 @@ pub mod sys {
     pub mod os {
         pub mod ifname;
         mod ifreq;
+        mod ioccom;
         pub mod nic;
         mod socket;
         mod sys;
