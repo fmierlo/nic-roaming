@@ -35,9 +35,10 @@ impl Nic {
 mod tests {
     use super::{BoxSocket, IfName, Nic};
     use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-    use crate::sys::os::socket::mock::{self, mock, ErrNo, MockSocket};
+    use crate::sys::os::socket;
+    use crate::sys::os::socket::mock::{self, ErrNo, MockSocket};
     use crate::{LinkLevelAddress, Result};
-    use mockdown::ThreadLocal;
+    use mockdown::StaticMockdown;
     use std::sync::LazyLock;
 
     impl Nic {
@@ -63,7 +64,7 @@ mod tests {
 
     #[test]
     fn test_get_lladd() {
-        mock()
+        socket::mock::mockdown()
             .expect(|mock::OpenLocalDgram()| {
                 assert!(true);
                 ErrNo::None
@@ -82,7 +83,7 @@ mod tests {
 
     #[test]
     fn test_set_lladd() {
-        mock()
+        socket::mock::mockdown()
             .expect(|mock::OpenLocalDgram()| {
                 assert!(true);
                 ErrNo::None

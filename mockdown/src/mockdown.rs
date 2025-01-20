@@ -1,203 +1,198 @@
+use expect::ExpectList;
 use std::any::{type_name, Any};
 use std::cell::RefCell;
 use std::default::Default;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::LocalKey;
 
-pub trait ThreadLocal {
-    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self;
-}
+mod expect {
+    use std::any::Any;
+    use std::fmt::Debug;
 
-impl ThreadLocal for LocalKey<RefCell<Mock>> {
-    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
-        self.with_borrow_mut(|mock| mock.add_expect(expect));
-        self
-    }
-}
-
-pub mod thread_local {
-    use super::Mock;
-    use crate::Mockdown;
-    use std::{any::Any, cell::RefCell, fmt::Debug, thread::LocalKey};
-
-    thread_local! {
-        static THREAD_LOCAL: RefCell<Mock> = new();
+    trait AsAny {
+        fn as_any(self) -> Box<dyn Any>;
     }
 
-    pub fn new() -> RefCell<Mock> {
-        Default::default()
+    impl<T: Any> AsAny for T {
+        fn as_any(self) -> Box<dyn Any> {
+            Box::new(self)
+        }
     }
 
-    pub fn mock() -> &'static LocalKey<RefCell<Mock>> {
-        THREAD_LOCAL.with_borrow_mut(|mock| mock.clear_expects());
-        &THREAD_LOCAL
+    trait AsType {
+        fn as_type<T: Any>(self, expect: &dyn Expect) -> Result<T, &'static str>;
     }
 
-    pub fn on_mock<T: Any + Debug, U: Any>(args: T) -> Result<U, String> {
-        let mock = THREAD_LOCAL.take();
-        let result = mock.on_mock(args);
-        THREAD_LOCAL.set(mock);
-        result
-    }
-}
-
-pub mod static_global {
-    use super::{Mock, Mockdown};
-    use std::sync::{Arc, LazyLock, Mutex};
-    use std::{any::Any, fmt::Debug};
-
-    static STATIC_GLOBAL: LazyLock<Arc<Mutex<Mock>>> = new();
-
-    pub const fn new() -> LazyLock<Arc<Mutex<Mock>>> {
-        LazyLock::new(|| Default::default())
+    impl AsType for Box<dyn Any> {
+        fn as_type<T: Any>(self, expect: &dyn Expect) -> Result<T, &'static str> {
+            self.downcast::<T>()
+                .map_err(|_| expect.type_name())
+                .map(|value| *value)
+        }
     }
 
-    pub fn clear_expects<T: Any, U: Any>() -> &'static LazyLock<Arc<Mutex<Mock>>> {
-        STATIC_GLOBAL.lock().unwrap().clear_expects();
-        &STATIC_GLOBAL
+    pub(super) trait Expect: Send {
+        fn on_mock(&self, when: Box<dyn Any>) -> Result<Box<dyn Any>, &'static str>;
+        fn type_name(&self) -> &'static str;
     }
 
-    pub fn expect<T: Any, U: Any>(expect: fn(T) -> U) -> &'static LazyLock<Arc<Mutex<Mock>>> {
-        STATIC_GLOBAL.lock().unwrap().add_expect(expect);
-        &STATIC_GLOBAL
+    impl Debug for dyn Expect {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self.type_name())
+        }
     }
 
-    pub fn mock<T: Any + Debug, U: Any>(args: T) -> Result<U, String> {
-        STATIC_GLOBAL.lock().unwrap().on_mock(args)
-    }
-}
-
-trait AsAny {
-    fn as_any(self) -> Box<dyn Any>;
-}
-
-impl<T: Any> AsAny for T {
-    fn as_any(self) -> Box<dyn Any> {
-        Box::new(self)
-    }
-}
-
-trait AsType {
-    fn as_type<T: Any>(self, expect: &dyn Expect) -> Result<T, &'static str>;
-}
-
-impl AsType for Box<dyn Any> {
-    fn as_type<T: Any>(self, expect: &dyn Expect) -> Result<T, &'static str> {
-        self.downcast::<T>()
-            .map_err(|_| expect.type_name())
-            .map(|value| *value)
-    }
-}
-
-trait Expect: Send {
-    fn mock(&self, when: Box<dyn Any>) -> Result<Box<dyn Any>, &'static str>;
-    fn type_name(&self) -> &'static str;
-}
-
-impl Debug for dyn Expect {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.type_name())
-    }
-}
-
-impl dyn Expect {
-    fn on_mock<T: Any, U: Any>(&self, when: T) -> Result<U, &'static str> {
-        let then = self.mock(when.as_any())?;
-        Ok(then.as_type(self)?)
-    }
-}
-
-impl<T: Any, U: Any> Expect for fn(T) -> U {
-    fn mock(&self, when: Box<dyn Any>) -> Result<Box<dyn Any>, &'static str> {
-        let then = self(when.as_type(self)?);
-        Ok(then.as_any())
+    impl dyn Expect {
+        pub(super) fn mock<T: Any, U: Any>(&self, when: T) -> Result<U, &'static str> {
+            let then = self.on_mock(when.as_any())?;
+            Ok(then.as_type(self)?)
+        }
     }
 
-    fn type_name(&self) -> &'static str {
-        std::any::type_name::<fn(T) -> U>()
-    }
-}
+    impl<T: Any, U: Any> Expect for fn(T) -> U {
+        fn on_mock(&self, when: Box<dyn Any>) -> Result<Box<dyn Any>, &'static str> {
+            let then = self(when.as_type(self)?);
+            Ok(then.as_any())
+        }
 
-#[derive(Debug, Default)]
-pub struct ExpectStore(Arc<Mutex<Vec<Box<dyn Expect>>>>);
-
-impl Clone for ExpectStore {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl ExpectStore {
-    fn add_expect<T: Any, U: Any>(&self, expect: fn(T) -> U) {
-        self.0.lock().unwrap().insert(0, Box::new(expect));
+        fn type_name(&self) -> &'static str {
+            std::any::type_name::<fn(T) -> U>()
+        }
     }
 
-    fn next_expect(&self) -> Option<Box<dyn Expect>> {
-        self.0.lock().unwrap().pop()
+    #[derive(Debug, Default)]
+    pub struct ExpectList {
+        list: Vec<Box<dyn Expect>>,
     }
 
-    fn clear(&self) {
-        self.0.lock().unwrap().clear();
+    impl ExpectList {
+        pub(super) fn clear(&mut self) {
+            self.list.clear();
+        }
+
+        pub(super) fn add<T: Any, U: Any>(&mut self, expect: fn(T) -> U) {
+            self.list.insert(0, Box::new(expect));
+        }
+
+        pub(super) fn next(&mut self) -> Option<Box<dyn Expect>> {
+            self.list.pop()
+        }
+
+        fn is_empty(&self) -> bool {
+            self.list.is_empty()
+        }
     }
 
-    fn is_empty(&self) -> bool {
-        self.0.lock().unwrap().is_empty()
-    }
-}
-
-impl Drop for ExpectStore {
-    fn drop(&mut self) {
-        if !self.is_empty() {
-            panic!("pending expects: {:?}", self.0.lock().unwrap())
+    impl Drop for ExpectList {
+        fn drop(&mut self) {
+            if !self.is_empty() {
+                panic!("Mockdown error, pending expects: {:?}", self.list)
+            }
         }
     }
 }
 
-fn type_error<T: Any + Debug, U: Any>(expect: &str) -> String {
-    let received = type_name::<fn(T) -> U>();
-    format!("expect type mismatch: expecting {expect:?}, received {received:?}")
+#[derive(Default)]
+pub struct Mockdown {
+    expects: ExpectList,
 }
 
-#[derive(Clone, Default)]
-pub struct Mock(ExpectStore);
-
-impl Mockdown for Mock {
-    fn store(&self) -> &ExpectStore {
-        &self.0
-    }
-}
-
-pub trait Mockdown
-where
-    Self: Sized,
-{
-    fn store(&self) -> &ExpectStore;
-
-    fn clear_expects(&self) {
-        self.store().clear();
+impl Mockdown {
+    pub fn new() -> Mockdown {
+        Default::default()
     }
 
-    fn expect<T: Any, U: Any>(self, expect: fn(T) -> U) -> Self {
-        self.store().add_expect(expect);
-        self
+    pub fn thread_local() -> RefCell<Mockdown> {
+        Default::default()
     }
 
-    fn add_expect<T: Any, U: Any>(&self, expect: fn(T) -> U) {
-        self.store().add_expect(expect);
+    pub const fn static_global() -> LazyLock<Arc<Mutex<Mockdown>>> {
+        LazyLock::new(|| Default::default())
     }
 
-    fn on_mock<T: Any + Debug, U: Any>(&self, args: T) -> Result<U, String> {
-        let expect = self.store().next_expect().ok_or_else(|| {
-            self.clear_expects();
-            type_error::<T, U>("nothing")
+    pub fn clone(mockdown: &Arc<Mutex<Mockdown>>) -> Arc<Mutex<Mockdown>> {
+        Arc::clone(mockdown)
+    }
+
+    fn clear(&mut self) {
+        self.expects.clear();
+    }
+
+    fn expect<T: Any, U: Any>(&mut self, expect: fn(T) -> U) {
+        self.expects.add(expect);
+    }
+
+    fn type_error<T: Any + Debug, U: Any>(expect: &str) -> String {
+        let received = type_name::<fn(T) -> U>();
+        format!("Mockdown error, expect type mismatch: expecting {expect:?}, received {received:?}")
+    }
+
+    fn mock<T: Any + Debug, U: Any>(&mut self, args: T) -> Result<U, String> {
+        let expect = self.expects.next().ok_or_else(|| {
+            self.expects.clear();
+            Self::type_error::<T, U>("nothing")
         })?;
 
-        let result = expect.on_mock(args).map_err(|expect| {
-            self.clear_expects();
-            type_error::<T, U>(expect)
+        let result = expect.mock(args).map_err(|expect| {
+            self.expects.clear();
+            Self::type_error::<T, U>(expect)
         })?;
 
         Ok(result)
+    }
+}
+
+pub trait StaticMockdown {
+    fn clear(&'static self) -> &'static Self;
+    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self;
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String>;
+}
+
+impl StaticMockdown for RefCell<Mockdown> {
+    fn clear(&'static self) -> &'static Self {
+        self.borrow_mut().clear();
+        self
+    }
+
+    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
+        self.borrow_mut().expect(expect);
+        self
+    }
+
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String> {
+        self.borrow_mut().mock(args)
+    }
+}
+
+impl StaticMockdown for LocalKey<RefCell<Mockdown>> {
+    fn clear(&'static self) -> &'static Self {
+        self.with_borrow_mut(|mock| mock.clear());
+        self
+    }
+
+    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
+        self.with_borrow_mut(|mock| mock.expect(expect));
+        self
+    }
+
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String> {
+        self.with_borrow_mut(|mock| mock.mock::<T, U>(args))
+    }
+}
+
+impl StaticMockdown for LazyLock<Arc<Mutex<Mockdown>>> {
+    fn clear(&'static self) -> &'static Self {
+        self.lock().unwrap().clear();
+        self
+    }
+
+    fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
+        self.lock().unwrap().expect(expect);
+        self
+    }
+
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String> {
+        self.lock().unwrap().mock(args)
     }
 }

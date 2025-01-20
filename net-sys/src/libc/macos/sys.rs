@@ -83,8 +83,16 @@ pub(crate) mod libc {
 #[cfg(test)]
 pub(crate) mod mock {
     use libc::{c_int, c_ulong, c_void};
-    pub use mockdown::thread_local::mock;
-    use mockdown::thread_local::on_mock;
+    use mockdown::{Mockdown, StaticMockdown};
+    use std::{cell::RefCell, thread::LocalKey};
+
+    thread_local! {
+        static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
+    }
+
+    pub(crate) fn mockdown() -> &'static LocalKey<RefCell<Mockdown>> {
+        &MOCKDOWN
+    }
 
     #[derive(Debug, PartialEq)]
     pub(crate) struct Socket(pub c_int, pub c_int, pub c_int);
@@ -97,22 +105,22 @@ pub(crate) mod mock {
 
     pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
         let args = Socket(domain, ty, protocol);
-        on_mock(args).unwrap()
+        mockdown().mock(args).unwrap()
     }
 
     pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
         let args = IoCtl((fd, request), arg);
-        on_mock(args).unwrap()
+        mockdown().mock(args).unwrap()
     }
 
     pub(crate) fn close(fd: c_int) -> c_int {
         let args = Close(fd);
-        on_mock(args).unwrap()
+        mockdown().mock(args).unwrap()
     }
 
     pub(crate) fn errno() -> c_int {
         let args = ErrNo();
-        on_mock(args).unwrap()
+        mockdown().mock(args).unwrap()
     }
 }
 

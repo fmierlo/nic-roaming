@@ -160,7 +160,7 @@ mod tests {
     use super::{ifreq, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
     use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
     use crate::sys::os::sys;
-    use mockdown::ThreadLocal;
+    use mockdown::StaticMockdown;
     use std::sync::LazyLock;
 
     static IFNAME: LazyLock<IfName> = LazyLock::new(|| "enx".try_into().unwrap());
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_box_debug() {
-        sys::mock().expect(|args| {
+        sys::mockdown().expect(|args| {
             assert_eq!(MOCK_CLOSE, args);
             RETURN_SUCCESS
         });
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_socket_open_local_dgram() {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 10
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn test_socket_open_local_dgram_error() {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FAILURE
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_get_lladdr() -> Result<()> {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_get_lladdr_error() -> Result<()> {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_set_lladdr() -> Result<()> {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_set_lladdr_error() -> Result<()> {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_close() {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -413,7 +413,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_close_error() {
-        sys::mock()
+        sys::mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -439,7 +439,16 @@ mod tests {
 pub(super) mod mock {
     use super::{Error, OpenSocket, Socket, SocketResult};
     use crate::Result;
-    pub(crate) use mockdown::thread_local::*;
+    use mockdown::{Mockdown, StaticMockdown};
+    use std::{cell::RefCell, thread::LocalKey};
+
+    thread_local! {
+        static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
+    }
+
+    pub(crate) fn mockdown() -> &'static LocalKey<RefCell<Mockdown>> {
+        &MOCKDOWN
+    }
 
     #[derive(Debug, PartialEq)]
     pub(crate) struct OpenLocalDgram();
@@ -456,7 +465,7 @@ pub(super) mod mock {
     impl Socket for MockSocket {
         fn open_local_dgram(&self) -> SocketResult {
             let args = OpenLocalDgram();
-            let on_mock: ErrNo = on_mock(args).unwrap();
+            let on_mock: ErrNo = mockdown().mock(args).unwrap();
             match on_mock {
                 None => Ok(Box::new(MockOpenSocket())),
                 Some(errno) => Err(Error::OpenLocalDgram(-1, errno).into()),
@@ -470,12 +479,12 @@ pub(super) mod mock {
     impl OpenSocket for MockOpenSocket {
         fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let args = GetLLAddr(arg);
-            on_mock(args).unwrap()
+            mockdown().mock(args).unwrap()
         }
 
         fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
             let args = SetLLAddr(arg);
-            on_mock(args).unwrap()
+            mockdown().mock(args).unwrap()
         }
     }
 }
