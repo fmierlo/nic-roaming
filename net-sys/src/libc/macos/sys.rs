@@ -4,54 +4,20 @@ pub(crate) use libc::*;
 #[cfg(test)]
 pub(crate) use mock::*;
 
-mod ioccom {
+use super::ioccom;
+use ::libc::c_ulong;
 
-    // /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/ioccom.h
-
-    // Ioctl's have the command encoded in the lower word, and the size of
-    // any in or out parameters in the upper word.  The high 3 bits of the
-    // upper word are used to encode the in/out status of the parameter.
-
-    use libc::c_ulong;
-
-    // param char 'i' as c_ulong
-    pub(super) const I: c_ulong = 105;
-    // parameter length, at most 13 bits
-    const IOCPARM_MASK: c_ulong = 0x1fff;
-    // copy parameters out
-    const IOC_OUT: c_ulong = 0x40000000;
-    // copy parameters in
-    const IOC_IN: c_ulong = 0x80000000;
-    // copy parameters in and out
-    const IOC_INOUT: c_ulong = IOC_IN | IOC_OUT;
-
-    #[cfg(not(tarpaulin_include))]
-    const fn ioc(inout: c_ulong, group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
-        inout | ((len & IOCPARM_MASK) << 16) | ((group) << 8) | (num)
-    }
-
-    #[cfg(not(tarpaulin_include))]
-    pub(super) const fn iow(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
-        ioc(IOC_IN, group, num, len)
-    }
-
-    #[cfg(not(tarpaulin_include))]
-    pub(super) const fn iorw(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
-        ioc(IOC_INOUT, group, num, len)
-    }
-}
-
-const IFREQ_SIZE: ::libc::c_ulong = 32;
+const IFREQ_SIZE: c_ulong = 32;
 
 // Get link level addr
 // SIOCGIFLLADDR = (0x80000000 |0x40000000) | 32 << 16 | (105 << 8) | 158 = 0xc020699e
 // https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/sockio.h#L265
-pub(super) const SIOCGIFLLADDR: ::libc::c_ulong = ioccom::iorw(ioccom::I, 158, IFREQ_SIZE);
+pub(crate) const SIOCGIFLLADDR: c_ulong = ioccom::iorw(ioccom::I, 158, IFREQ_SIZE);
 
 // Set link level addr
 // SIOCSIFLLADDR = 0x80000000 | 32 << 16 | (105 << 8) | 60 = 0x8020693c
 // https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/sockio.h#L146
-pub(super) const SIOCSIFLLADDR: ::libc::c_ulong = ioccom::iow(ioccom::I, 60, IFREQ_SIZE);
+pub(crate) const SIOCSIFLLADDR: c_ulong = ioccom::iow(ioccom::I, 60, IFREQ_SIZE);
 
 pub(super) fn strerror(errno: ::libc::c_int) -> String {
     let ptr = unsafe { ::libc::strerror(errno) };
