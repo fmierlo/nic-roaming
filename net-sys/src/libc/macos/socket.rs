@@ -11,7 +11,7 @@ use super::sys;
 use mocks::sys;
 
 #[derive(Clone, PartialEq, Eq)]
-enum Error {
+pub(crate) enum Error {
     OpenLocalDgram(libc::c_int, libc::c_int),
     GetLinkLevelAddress(libc::c_int, IfName, libc::c_int, libc::c_int),
     SetLinkLevelAddress(
@@ -69,7 +69,7 @@ impl Debug for Error {
     }
 }
 
-type SocketResult = Result<Box<dyn OpenSocket>>;
+pub(crate) type SocketResult = Result<Box<dyn OpenSocket>>;
 
 pub(super) trait Socket: Debug {
     fn open_local_dgram(&self) -> SocketResult;
@@ -487,59 +487,5 @@ mod tests {
         let open_socket = socket.open_local_dgram().unwrap();
 
         drop(open_socket);
-    }
-}
-
-#[cfg(test)]
-pub(super) mod mock {
-    use super::{Error, OpenSocket, Socket, SocketResult};
-    use crate::Result;
-    use mockdown::{Mockdown, Static};
-    use std::{cell::RefCell, thread::LocalKey};
-
-    thread_local! {
-        static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
-    }
-
-    pub(crate) fn mockdown() -> &'static LocalKey<RefCell<Mockdown>> {
-        &MOCKDOWN
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub(crate) struct OpenLocalDgram();
-    pub(crate) type ErrNo = Option<i32>;
-
-    #[derive(Debug, PartialEq)]
-    pub(crate) struct GetLLAddr(pub *mut libc::c_void);
-    #[derive(Debug, PartialEq)]
-    pub(crate) struct SetLLAddr(pub *mut libc::c_void);
-
-    #[derive(Clone, Debug, Default)]
-    pub(crate) struct MockSocket();
-
-    impl Socket for MockSocket {
-        fn open_local_dgram(&self) -> SocketResult {
-            let args = OpenLocalDgram();
-            let on_mock: ErrNo = MOCKDOWN.mock(args).unwrap();
-            match on_mock {
-                None => Ok(Box::new(MockOpenSocket())),
-                Some(errno) => Err(Error::OpenLocalDgram(-1, errno).into()),
-            }
-        }
-    }
-
-    #[derive(Debug)]
-    pub(crate) struct MockOpenSocket();
-
-    impl OpenSocket for MockOpenSocket {
-        fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
-            let args = GetLLAddr(arg);
-            MOCKDOWN.mock(args).unwrap()
-        }
-
-        fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
-            let args = SetLLAddr(arg);
-            MOCKDOWN.mock(args).unwrap()
-        }
     }
 }

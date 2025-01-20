@@ -32,11 +32,66 @@ impl Nic {
 }
 
 #[cfg(test)]
+pub(crate) mod mocks {
+    pub(crate) mod socket {
+        use crate::sys::os::socket::{Error, OpenSocket, Socket, SocketResult};
+        use crate::Result;
+        use mockdown::{Mockdown, Static};
+        use std::{cell::RefCell, thread::LocalKey};
+
+        thread_local! {
+            static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
+        }
+
+        pub(crate) fn mockdown() -> &'static LocalKey<RefCell<Mockdown>> {
+            &MOCKDOWN
+        }
+
+        #[derive(Debug, PartialEq)]
+        pub(crate) struct OpenLocalDgram();
+        pub(crate) type ErrNo = Option<i32>;
+
+        #[derive(Debug, PartialEq)]
+        pub(crate) struct GetLLAddr(pub *mut libc::c_void);
+        #[derive(Debug, PartialEq)]
+        pub(crate) struct SetLLAddr(pub *mut libc::c_void);
+
+        #[derive(Clone, Debug, Default)]
+        pub(crate) struct MockSocket();
+
+        impl Socket for MockSocket {
+            fn open_local_dgram(&self) -> SocketResult {
+                let args = OpenLocalDgram();
+                let on_mock: ErrNo = MOCKDOWN.mock(args).unwrap();
+                match on_mock {
+                    None => Ok(Box::new(MockOpenSocket())),
+                    Some(errno) => Err(Error::OpenLocalDgram(-1, errno).into()),
+                }
+            }
+        }
+
+        #[derive(Debug)]
+        pub(crate) struct MockOpenSocket();
+
+        impl OpenSocket for MockOpenSocket {
+            fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
+                let args = GetLLAddr(arg);
+                MOCKDOWN.mock(args).unwrap()
+            }
+
+            fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
+                let args = SetLLAddr(arg);
+                MOCKDOWN.mock(args).unwrap()
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::mocks::socket::{self, ErrNo, MockSocket};
     use super::{BoxSocket, IfName, Nic};
     use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-    use crate::sys::os::socket;
-    use crate::sys::os::socket::mock::{self, ErrNo, MockSocket};
     use crate::{LinkLevelAddress, Result};
     use mockdown::Static;
     use std::sync::LazyLock;
@@ -64,12 +119,12 @@ mod tests {
 
     #[test]
     fn test_get_lladd() {
-        socket::mock::mockdown()
-            .expect(|mock::OpenLocalDgram()| {
+        socket::mockdown()
+            .expect(|socket::OpenLocalDgram()| {
                 assert!(true);
                 ErrNo::None
             })
-            .expect(|mock::GetLLAddr(ifreq)| {
+            .expect(|socket::GetLLAddr(ifreq)| {
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 ifreq_set_lladdr(ifreq, *LLADDR);
                 Result::Ok(())
@@ -83,12 +138,12 @@ mod tests {
 
     #[test]
     fn test_set_lladd() {
-        socket::mock::mockdown()
-            .expect(|mock::OpenLocalDgram()| {
+        socket::mockdown()
+            .expect(|socket::OpenLocalDgram()| {
                 assert!(true);
                 ErrNo::None
             })
-            .expect(|mock::SetLLAddr(ifreq)| {
+            .expect(|socket::SetLLAddr(ifreq)| {
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
                 Result::Ok(())
