@@ -160,7 +160,7 @@ mod tests {
     use super::{ifreq, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
     use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
     use crate::sys::os::sys;
-    use mockdown::StaticMockdown;
+    use mockdown::Static;
     use std::sync::LazyLock;
 
     static IFNAME: LazyLock<IfName> = LazyLock::new(|| "enx".try_into().unwrap());
@@ -439,7 +439,7 @@ mod tests {
 pub(super) mod mock {
     use super::{Error, OpenSocket, Socket, SocketResult};
     use crate::Result;
-    use mockdown::{Mockdown, StaticMockdown};
+    use mockdown::{Mockdown, Static};
     use std::{cell::RefCell, thread::LocalKey};
 
     thread_local! {

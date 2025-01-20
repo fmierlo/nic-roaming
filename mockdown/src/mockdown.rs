@@ -119,7 +119,7 @@ impl Mockdown {
         self.expects.clear();
     }
 
-    fn expect<T: Any, U: Any>(&mut self, expect: fn(T) -> U) {
+    fn add<T: Any, U: Any>(&mut self, expect: fn(T) -> U) {
         self.expects.add(expect);
     }
 
@@ -143,20 +143,20 @@ impl Mockdown {
     }
 }
 
-pub trait StaticMockdown {
+pub trait Static {
     fn clear(&'static self) -> &'static Self;
     fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self;
     fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String>;
 }
 
-impl StaticMockdown for RefCell<Mockdown> {
+impl Static for RefCell<Mockdown> {
     fn clear(&'static self) -> &'static Self {
         self.borrow_mut().clear();
         self
     }
 
     fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
-        self.borrow_mut().expect(expect);
+        self.borrow_mut().add(expect);
         self
     }
 
@@ -165,14 +165,14 @@ impl StaticMockdown for RefCell<Mockdown> {
     }
 }
 
-impl StaticMockdown for LocalKey<RefCell<Mockdown>> {
+impl Static for LocalKey<RefCell<Mockdown>> {
     fn clear(&'static self) -> &'static Self {
         self.with_borrow_mut(|mock| mock.clear());
         self
     }
 
     fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
-        self.with_borrow_mut(|mock| mock.expect(expect));
+        self.with_borrow_mut(|mock| mock.add(expect));
         self
     }
 
@@ -181,18 +181,27 @@ impl StaticMockdown for LocalKey<RefCell<Mockdown>> {
     }
 }
 
-impl StaticMockdown for LazyLock<Arc<Mutex<Mockdown>>> {
+impl Static for LazyLock<Arc<Mutex<Mockdown>>> {
     fn clear(&'static self) -> &'static Self {
         self.lock().unwrap().clear();
         self
     }
 
     fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self {
-        self.lock().unwrap().expect(expect);
+        self.lock().unwrap().add(expect);
         self
     }
 
     fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String> {
         self.lock().unwrap().mock(args)
+    }
+}
+
+pub trait Times: Static {
+    fn times<T: Any, U: Any>(&'static self, times: u8, expect: fn(T) -> U) -> &'static Self {
+        for _ in 0..times {
+            self.expect(expect);
+        }
+        self
     }
 }

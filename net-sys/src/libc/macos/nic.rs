@@ -38,7 +38,7 @@ mod tests {
     use crate::sys::os::socket;
     use crate::sys::os::socket::mock::{self, ErrNo, MockSocket};
     use crate::{LinkLevelAddress, Result};
-    use mockdown::StaticMockdown;
+    use mockdown::Static;
     use std::sync::LazyLock;
 
     impl Nic {

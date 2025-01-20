@@ -83,7 +83,7 @@ pub(crate) mod libc {
 #[cfg(test)]
 pub(crate) mod mock {
     use libc::{c_int, c_ulong, c_void};
-    use mockdown::{Mockdown, StaticMockdown};
+    use mockdown::{Mockdown, Static};
     use std::{cell::RefCell, thread::LocalKey};
 
     thread_local! {
