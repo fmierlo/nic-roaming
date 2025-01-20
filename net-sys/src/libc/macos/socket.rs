@@ -1,9 +1,14 @@
 use super::ifname::IfName;
 use super::ifreq::{self};
-use super::sys;
 use crate::{LinkLevelAddress, Result};
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
+
+#[cfg(not(test))]
+use super::sys;
+
+#[cfg(test)]
+use mocks::sys;
 
 #[derive(Clone, PartialEq, Eq)]
 enum Error {
@@ -156,10 +161,60 @@ impl Drop for LibcOpenSocket {
 }
 
 #[cfg(test)]
+pub(crate) mod mocks {
+    pub(crate) mod sys {
+        use crate::sys::os::sys;
+        use libc::{c_int, c_ulong, c_void};
+        use mockdown::Mockdown;
+        use mockdown::Static;
+        use std::{cell::RefCell, thread::LocalKey};
+
+        pub(crate) use sys::{strerror, SIOCGIFLLADDR, SIOCSIFLLADDR};
+
+        thread_local! {
+            static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
+        }
+
+        pub(crate) fn mockdown() -> &'static LocalKey<RefCell<Mockdown>> {
+            &MOCKDOWN
+        }
+
+        #[derive(Debug, PartialEq)]
+        pub(crate) struct Socket(pub c_int, pub c_int, pub c_int);
+        #[derive(Debug, PartialEq)]
+        pub(crate) struct IoCtl(pub (c_int, c_ulong), pub *mut c_void);
+        #[derive(Debug, PartialEq)]
+        pub(crate) struct Close(pub c_int);
+        #[derive(Debug)]
+        pub(crate) struct ErrNo();
+
+        pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
+            let args = Socket(domain, ty, protocol);
+            MOCKDOWN.mock(args).unwrap()
+        }
+
+        pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
+            let args = IoCtl((fd, request), arg);
+            MOCKDOWN.mock(args).unwrap()
+        }
+
+        pub(crate) fn close(fd: c_int) -> c_int {
+            let args = Close(fd);
+            MOCKDOWN.mock(args).unwrap()
+        }
+
+        pub(crate) fn errno() -> c_int {
+            let args = ErrNo();
+            MOCKDOWN.mock(args).unwrap()
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::mocks::sys;
     use super::{ifreq, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
     use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-    use crate::sys::os::sys;
     use mockdown::Static;
     use std::sync::LazyLock;
 

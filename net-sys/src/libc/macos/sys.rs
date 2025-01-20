@@ -1,11 +1,8 @@
-#[cfg(not(test))]
-pub(crate) use libc::*;
-
-#[cfg(test)]
-pub(crate) use mock::*;
-
 use super::ioccom;
 use ::libc::c_ulong;
+
+#[cfg(not(test))]
+use libc::{c_int, c_void};
 
 const IFREQ_SIZE: c_ulong = 32;
 
@@ -19,75 +16,30 @@ pub(crate) const SIOCGIFLLADDR: c_ulong = ioccom::iorw(ioccom::I, 158, IFREQ_SIZ
 // https://github.com/apple/darwin-xnu/blob/2ff845c2e033bd0ff64b5b6aa6063a1f8f65aa32/bsd/sys/sockio.h#L146
 pub(crate) const SIOCSIFLLADDR: c_ulong = ioccom::iow(ioccom::I, 60, IFREQ_SIZE);
 
-pub(super) fn strerror(errno: ::libc::c_int) -> String {
-    let ptr = unsafe { ::libc::strerror(errno) };
-    let c_str = unsafe { std::ffi::CStr::from_ptr(ptr) };
-    c_str.to_bytes().escape_ascii().to_string()
+#[cfg(not(test))]
+pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
+    unsafe { libc::socket(domain, ty, protocol) }
 }
 
 #[cfg(not(test))]
-pub(crate) mod libc {
-    use libc::{c_int, c_ulong, c_void};
-
-    pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-        unsafe { libc::socket(domain, ty, protocol) }
-    }
-
-    pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-        unsafe { libc::ioctl(fd, request, arg) }
-    }
-
-    pub(crate) fn close(fd: c_int) -> c_int {
-        unsafe { libc::close(fd) }
-    }
-
-    pub(crate) fn errno() -> c_int {
-        unsafe { *libc::__error() }
-    }
+pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
+    unsafe { libc::ioctl(fd, request, arg) }
 }
 
-#[cfg(test)]
-pub(crate) mod mock {
-    use libc::{c_int, c_ulong, c_void};
-    use mockdown::{Mockdown, Static};
-    use std::{cell::RefCell, thread::LocalKey};
+#[cfg(not(test))]
+pub(crate) fn close(fd: c_int) -> c_int {
+    unsafe { libc::close(fd) }
+}
 
-    thread_local! {
-        static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
-    }
+#[cfg(not(test))]
+pub(crate) fn errno() -> c_int {
+    unsafe { *libc::__error() }
+}
 
-    pub(crate) fn mockdown() -> &'static LocalKey<RefCell<Mockdown>> {
-        &MOCKDOWN
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub(crate) struct Socket(pub c_int, pub c_int, pub c_int);
-    #[derive(Debug, PartialEq)]
-    pub(crate) struct IoCtl(pub (c_int, c_ulong), pub *mut c_void);
-    #[derive(Debug, PartialEq)]
-    pub(crate) struct Close(pub c_int);
-    #[derive(Debug)]
-    pub(crate) struct ErrNo();
-
-    pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
-        let args = Socket(domain, ty, protocol);
-        MOCKDOWN.mock(args).unwrap()
-    }
-
-    pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-        let args = IoCtl((fd, request), arg);
-        MOCKDOWN.mock(args).unwrap()
-    }
-
-    pub(crate) fn close(fd: c_int) -> c_int {
-        let args = Close(fd);
-        MOCKDOWN.mock(args).unwrap()
-    }
-
-    pub(crate) fn errno() -> c_int {
-        let args = ErrNo();
-        MOCKDOWN.mock(args).unwrap()
-    }
+pub(crate) fn strerror(errno: ::libc::c_int) -> String {
+    let ptr = unsafe { ::libc::strerror(errno) };
+    let c_str = unsafe { std::ffi::CStr::from_ptr(ptr) };
+    c_str.to_bytes().escape_ascii().to_string()
 }
 
 #[cfg(test)]
