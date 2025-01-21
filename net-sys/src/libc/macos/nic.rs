@@ -34,9 +34,10 @@ impl Nic {
 #[cfg(test)]
 pub(crate) mod mocks {
     pub(crate) mod socket {
-        use crate::sys::os::socket::{Error, OpenSocket, Socket, SocketResult};
+        use crate::sys::os::socket::{OpenSocket, Socket, SocketResult};
         use crate::Result;
         use mockdown::{Mockdown, Static};
+        use std::fmt::Debug;
         use std::{cell::RefCell, thread::LocalKey};
 
         thread_local! {
@@ -49,12 +50,22 @@ pub(crate) mod mocks {
 
         #[derive(Debug, PartialEq)]
         pub(crate) struct OpenLocalDgram();
-        pub(crate) type ErrNo = Option<i32>;
-
         #[derive(Debug, PartialEq)]
         pub(crate) struct GetLLAddr(pub *mut libc::c_void);
         #[derive(Debug, PartialEq)]
         pub(crate) struct SetLLAddr(pub *mut libc::c_void);
+
+        pub(crate) struct MockResult {}
+
+        impl MockResult {
+            pub(crate) fn ok() -> Result<()> {
+                Result::<()>::Ok(())
+            }
+
+            pub(crate) fn err(error: &str) -> Result<()> {
+                Result::<()>::Err(error.into())
+            }
+        }
 
         #[derive(Clone, Debug, Default)]
         pub(crate) struct MockSocket();
@@ -62,26 +73,32 @@ pub(crate) mod mocks {
         impl Socket for MockSocket {
             fn open_local_dgram(&self) -> SocketResult {
                 let args = OpenLocalDgram();
-                let on_mock: ErrNo = MOCKDOWN.mock(args).unwrap();
-                match on_mock {
-                    None => Ok(Box::new(MockOpenSocket())),
-                    Some(errno) => Err(Error::OpenLocalDgram(-1, errno).into()),
-                }
+                MOCKDOWN.mock(args)?
             }
         }
 
         #[derive(Debug)]
         pub(crate) struct MockOpenSocket();
 
+        impl MockOpenSocket {
+            pub(crate) fn ok() -> SocketResult {
+                SocketResult::Ok(Box::new(MockOpenSocket()))
+            }
+
+            pub(crate) fn err(error: &str) -> SocketResult {
+                SocketResult::Err(error.into())
+            }
+        }
+
         impl OpenSocket for MockOpenSocket {
             fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
                 let args = GetLLAddr(arg);
-                MOCKDOWN.mock(args).unwrap()
+                MOCKDOWN.mock(args)?
             }
 
             fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
                 let args = SetLLAddr(arg);
-                MOCKDOWN.mock(args).unwrap()
+                MOCKDOWN.mock(args)?
             }
         }
     }
@@ -89,10 +106,10 @@ pub(crate) mod mocks {
 
 #[cfg(test)]
 mod tests {
-    use super::mocks::socket::{self, ErrNo, MockSocket};
-    use super::{BoxSocket, IfName, Nic};
-    use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-    use crate::{LinkLevelAddress, Result};
+    use super::super::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
+    use super::mocks::socket::{self, MockOpenSocket, MockResult, MockSocket};
+    use super::BoxSocket;
+    use crate::{IfName, LinkLevelAddress, Nic};
     use mockdown::Static;
     use std::sync::LazyLock;
 
@@ -118,16 +135,16 @@ mod tests {
     }
 
     #[test]
-    fn test_get_lladd() {
+    fn test_get_lladdr() {
         socket::mockdown()
             .expect(|socket::OpenLocalDgram()| {
                 assert!(true);
-                ErrNo::None
+                MockOpenSocket::ok()
             })
             .expect(|socket::GetLLAddr(ifreq)| {
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 ifreq_set_lladdr(ifreq, *LLADDR);
-                Result::Ok(())
+                MockResult::ok()
             });
 
         let socket = MockSocket::default();
@@ -137,19 +154,91 @@ mod tests {
     }
 
     #[test]
-    fn test_set_lladd() {
+    fn test_get_lladdr_open_error() {
+        socket::mockdown().expect(|socket::OpenLocalDgram()| {
+            assert!(true);
+            MockOpenSocket::err("GetLinkLevelAddressOpenError")
+        });
+
+        let expected_error = "GetLinkLevelAddressOpenError";
+
+        let socket = MockSocket::default();
+        let error = Nic::new(&socket).get_lladd(&IFNAME).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+    }
+
+    #[test]
+    fn test_get_lladdr_error() {
         socket::mockdown()
             .expect(|socket::OpenLocalDgram()| {
                 assert!(true);
-                ErrNo::None
+                MockOpenSocket::ok()
+            })
+            .expect(|socket::GetLLAddr(ifreq)| {
+                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
+                ifreq_set_lladdr(ifreq, *LLADDR);
+                MockResult::err("GetLinkLevelAddressError")
+            });
+
+        let expected_error = "GetLinkLevelAddressError";
+
+        let socket = MockSocket::default();
+        let error = Nic::new(&socket).get_lladd(&IFNAME).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+    }
+
+    #[test]
+    fn test_set_lladdr() {
+        socket::mockdown()
+            .expect(|socket::OpenLocalDgram()| {
+                assert!(true);
+                MockOpenSocket::ok()
             })
             .expect(|socket::SetLLAddr(ifreq)| {
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
-                Result::Ok(())
+                MockResult::ok()
             });
 
         let socket = MockSocket::default();
         Nic::new(&socket).set_lladd(&IFNAME, &LLADDR).unwrap();
+    }
+
+    #[test]
+    fn test_set_lladdr_open_error() {
+        socket::mockdown().expect(|socket::OpenLocalDgram()| {
+            assert!(true);
+            MockOpenSocket::err("SetLinkLevelAddressOpenError")
+        });
+
+        let expected_error = "SetLinkLevelAddressOpenError";
+
+        let socket = MockSocket::default();
+        let error = Nic::new(&socket).set_lladd(&IFNAME, &LLADDR).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
+    }
+
+    #[test]
+    fn test_set_lladdr_error() {
+        socket::mockdown()
+            .expect(|socket::OpenLocalDgram()| {
+                assert!(true);
+                MockOpenSocket::ok()
+            })
+            .expect(|socket::SetLLAddr(ifreq)| {
+                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
+                assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
+                MockResult::err("SetLinkLevelAddressError")
+            });
+
+        let expected_error = "SetLinkLevelAddressError";
+
+        let socket = MockSocket::default();
+        let error = Nic::new(&socket).set_lladd(&IFNAME, &LLADDR).unwrap_err();
+
+        assert_eq!(format!("{}", error), expected_error);
     }
 }

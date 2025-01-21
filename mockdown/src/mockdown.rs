@@ -2,6 +2,7 @@ use expect::ExpectList;
 use std::any::{type_name, Any};
 use std::cell::RefCell;
 use std::default::Default;
+use std::error::Error;
 use std::fmt::Debug;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::LocalKey;
@@ -128,7 +129,7 @@ impl Mockdown {
         format!("Mockdown error, expect type mismatch: expecting {expect:?}, received {received:?}")
     }
 
-    fn mock<T: Any + Debug, U: Any>(&mut self, args: T) -> Result<U, String> {
+    fn mock<T: Any + Debug, U: Any>(&mut self, args: T) -> Result<U, Box<dyn Error>> {
         let expect = self.expects.next().ok_or_else(|| {
             self.expects.clear();
             Self::type_error::<T, U>("nothing")
@@ -146,7 +147,7 @@ impl Mockdown {
 pub trait Static {
     fn clear(&'static self) -> &'static Self;
     fn expect<T: Any, U: Any>(&'static self, expect: fn(T) -> U) -> &'static Self;
-    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String>;
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, Box<dyn Error>>;
 }
 
 impl Static for RefCell<Mockdown> {
@@ -160,7 +161,7 @@ impl Static for RefCell<Mockdown> {
         self
     }
 
-    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String> {
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, Box<dyn Error>> {
         self.borrow_mut().mock(args)
     }
 }
@@ -176,7 +177,7 @@ impl Static for LocalKey<RefCell<Mockdown>> {
         self
     }
 
-    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String> {
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, Box<dyn Error>> {
         self.with_borrow_mut(|mock| mock.mock::<T, U>(args))
     }
 }
@@ -192,7 +193,7 @@ impl Static for LazyLock<Arc<Mutex<Mockdown>>> {
         self
     }
 
-    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, String> {
+    fn mock<T: Any + Debug, U: Any>(&'static self, args: T) -> Result<U, Box<dyn Error>> {
         self.lock().unwrap().mock(args)
     }
 }

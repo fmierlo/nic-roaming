@@ -11,7 +11,7 @@ use super::sys;
 use mocks::sys;
 
 #[derive(Clone, PartialEq, Eq)]
-pub(crate) enum Error {
+enum Error {
     OpenLocalDgram(libc::c_int, libc::c_int),
     GetLinkLevelAddress(libc::c_int, IfName, libc::c_int, libc::c_int),
     SetLinkLevelAddress(
@@ -107,7 +107,7 @@ impl Socket for LibcSocket {
     }
 }
 
-pub(super) trait OpenSocket: Debug {
+pub(crate) trait OpenSocket: Debug {
     fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
     fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
 }
