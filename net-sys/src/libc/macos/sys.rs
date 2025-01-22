@@ -18,21 +18,25 @@ pub(crate) const SIOCGIFLLADDR: c_ulong = ioccom::iorw(ioccom::I, 158, IFREQ_SIZ
 pub(crate) const SIOCSIFLLADDR: c_ulong = ioccom::iow(ioccom::I, 60, IFREQ_SIZE);
 
 #[cfg(not(test))]
+#[cfg(not(tarpaulin_include))]
 pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
     unsafe { libc::socket(domain, ty, protocol) }
 }
 
 #[cfg(not(test))]
+#[cfg(not(tarpaulin_include))]
 pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
     unsafe { libc::ioctl(fd, request, arg) }
 }
 
 #[cfg(not(test))]
+#[cfg(not(tarpaulin_include))]
 pub(crate) fn close(fd: c_int) -> c_int {
     unsafe { libc::close(fd) }
 }
 
 #[cfg(not(test))]
+#[cfg(not(tarpaulin_include))]
 pub(crate) fn errno() -> c_int {
     unsafe { *libc::__error() }
 }

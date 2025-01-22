@@ -2,6 +2,7 @@ use std::error::Error;
 
 use net_sys::{IfName, LLAddr, nic};
 
+#[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Box<dyn Error>> {
     let action = std::env::args().nth(1);
     let ifname = std::env::args().nth(2);

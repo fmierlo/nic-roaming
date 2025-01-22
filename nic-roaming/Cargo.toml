@@ -9,3 +9,6 @@ name = "nicr"
 
 [dependencies]
 net-sys = { path = "../net-sys", features = ["libc"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
