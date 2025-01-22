@@ -69,56 +69,23 @@ impl Debug for Error {
     }
 }
 
-pub(crate) type SocketResult = Result<Box<dyn OpenSocket>>;
-
-pub(super) trait Socket: Debug {
-    fn open_local_dgram(&self) -> SocketResult;
-}
-
-#[derive(Debug, Default)]
-pub(super) struct BoxSocket(pub(super) Box<dyn Socket>);
-
-impl Default for Box<dyn Socket> {
-    fn default() -> Self {
-        Box::new(LibcSocket::default())
-    }
-}
-
-impl Deref for BoxSocket {
-    type Target = Box<dyn Socket>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Debug, Default)]
-struct LibcSocket();
-
-impl Socket for LibcSocket {
-    fn open_local_dgram(&self) -> SocketResult {
-        match sys::socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
-            fd if fd >= 0 => Ok(Box::new(LibcOpenSocket { fd })),
-            ret => {
-                let errno = sys::errno();
-                Err(Error::OpenLocalDgram(ret, errno).into())
-            }
+pub(crate) fn open_local_dgram() -> Result<OpenSocket> {
+    match sys::socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
+        fd if fd >= 0 => Ok(OpenSocket { fd }),
+        ret => {
+            let errno = sys::errno();
+            Err(Error::OpenLocalDgram(ret, errno).into())
         }
     }
 }
 
-pub(crate) trait OpenSocket: Debug {
-    fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
-    fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()>;
-}
-
 #[derive(Debug)]
-struct LibcOpenSocket {
+pub(crate) struct OpenSocket {
     fd: libc::c_int,
 }
 
-impl OpenSocket for LibcOpenSocket {
-    fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
+impl OpenSocket {
+    pub(crate) fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
         let fd = self.fd;
         match sys::ioctl(fd, sys::SIOCGIFLLADDR, arg) {
             0 => Ok(()),
@@ -131,7 +98,7 @@ impl OpenSocket for LibcOpenSocket {
         }
     }
 
-    fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
+    pub(crate) fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
         let fd = self.fd;
         match sys::ioctl(fd, sys::SIOCSIFLLADDR, arg) {
             0 => Ok(()),
@@ -146,7 +113,7 @@ impl OpenSocket for LibcOpenSocket {
     }
 }
 
-impl Drop for LibcOpenSocket {
+impl Drop for OpenSocket {
     fn drop(&mut self) {
         let fd = self.fd;
         match sys::close(fd) {
@@ -170,13 +137,6 @@ pub(crate) mod mocks {
         use crate::sys::os::sys;
 
         pub(crate) use sys::{strerror, SIOCGIFLLADDR, SIOCSIFLLADDR};
-        thread_local! {
-            static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
-        }
-
-        pub(crate) fn mockdown() -> &'static LocalKey<RefCell<Mockdown>> {
-            &MOCKDOWN
-        }
 
         #[derive(Debug, PartialEq)]
         pub(crate) struct Socket(pub c_int, pub c_int, pub c_int);
@@ -189,22 +149,22 @@ pub(crate) mod mocks {
 
         pub(crate) fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int {
             let args = Socket(domain, ty, protocol);
-            MOCKDOWN.mock(args).unwrap()
+            mockdown().mock(args).unwrap()
         }
 
         pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
             let args = IoCtl((fd, request), arg);
-            MOCKDOWN.mock(args).unwrap()
+            mockdown().mock(args).unwrap()
         }
 
         pub(crate) fn close(fd: c_int) -> c_int {
             let args = Close(fd);
-            MOCKDOWN.mock(args).unwrap()
+            mockdown().mock(args).unwrap()
         }
 
         pub(crate) fn errno() -> c_int {
             let args = ErrNo();
-            MOCKDOWN.mock(args).unwrap()
+            mockdown().mock(args).unwrap()
         }
     }
 }
@@ -217,7 +177,7 @@ mod tests {
 
     use crate::{IfName, LinkLevelAddress, Result};
 
-    use super::{ifreq, open_local_dgram};
+    use super::{ifreq, open_local_dgram, OpenSocket};
 
     use super::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
 
@@ -237,71 +197,28 @@ mod tests {
     const MOCK_CLOSE: sys::Close = sys::Close(MOCK_FD);
 
     #[test]
-    fn test_socket_box_default() {
-        let expected_default = "BoxSocket(LibcSocket)";
-
-        let box_socket = super::BoxSocket::default();
-
-        assert_eq!(format!("{:?}", box_socket), expected_default);
-    }
-
-    #[test]
-    fn test_socket_box_debug() {
-        let socket = super::LibcSocket::default();
-        let expected_debug = "BoxSocket(LibcSocket)";
-
-        let box_socket = super::BoxSocket(Box::new(socket));
-
-        assert_eq!(format!("{:?}", box_socket), expected_debug);
-    }
-
-    #[test]
-    fn test_socket_box_deref() {
-        let socket = super::LibcSocket::default();
-        let expected_deref = "LibcSocket";
-
-        let deref_box_socket = &*super::BoxSocket(Box::new(socket));
-
-        assert_eq!(format!("{:?}", deref_box_socket), expected_deref);
-    }
-
-    #[test]
-    fn test_open_socket_box_debug() {
-        sys::mockdown().expect(|args| {
-            assert_eq!(MOCK_CLOSE, args);
-            RETURN_SUCCESS
-        });
-
-        let expected_debug = "LibcOpenSocket { fd: 3 }";
-
-        let box_open_socket: Box<dyn super::OpenSocket> =
-            Box::new(super::LibcOpenSocket { fd: MOCK_FD });
-
-        assert_eq!(format!("{:?}", box_open_socket), expected_debug);
-    }
-
-    #[test]
     fn test_socket_open_local_dgram() {
-        sys::mockdown()
+        const FD: libc::c_int = 10;
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
-                10
+                FD
             })
             .expect(|args| {
-                assert_eq!(sys::Close(10), args);
+                assert_eq!(sys::Close(FD), args);
                 RETURN_SUCCESS
             });
 
-        let expected_open_socket = "LibcOpenSocket { fd: 10 }";
+        let expected_open_socket = "OpenSocket { fd: 10 }";
 
-        let open_socket = LibcSocket().open_local_dgram().unwrap();
+        let open_socket = open_local_dgram().unwrap();
 
         assert_eq!(format!("{:?}", open_socket), expected_open_socket);
     }
 
     #[test]
     fn test_socket_open_local_dgram_error() {
-        sys::mockdown()
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FAILURE
@@ -313,15 +230,29 @@ mod tests {
 
         let expected_error = "Socket::OpenLocalDgramError { ret: -1, errno: 1, strerror: \"Operation not permitted\" }";
 
-        let error = LibcSocket().open_local_dgram().unwrap_err();
+        let error = open_local_dgram().unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
         assert_eq!(format!("{:?}", error), expected_error);
     }
 
     #[test]
+    fn test_open_socket_debug() {
+        mockdown().expect(|args| {
+            assert_eq!(MOCK_CLOSE, args);
+            RETURN_SUCCESS
+        });
+
+        let expected_debug = "OpenSocket { fd: 3 }";
+
+        let box_open_socket = OpenSocket { fd: MOCK_FD };
+
+        assert_eq!(format!("{:?}", box_open_socket), expected_debug);
+    }
+
+    #[test]
     fn test_open_socket_get_lladdr() -> Result<()> {
-        sys::mockdown()
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -340,8 +271,7 @@ mod tests {
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &IFNAME);
 
-        LibcSocket()
-            .open_local_dgram()?
+        open_local_dgram()?
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))
             .unwrap();
 
@@ -351,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_get_lladdr_error() -> Result<()> {
-        sys::mockdown()
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -374,8 +304,7 @@ mod tests {
         let mut ifreq = ifreq::new();
         ifreq::set_name(&mut ifreq, &IFNAME);
 
-        let error = LibcSocket()
-            .open_local_dgram()?
+        let error = open_local_dgram()?
             .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))
             .unwrap_err();
 
@@ -387,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_set_lladdr() -> Result<()> {
-        sys::mockdown()
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -407,16 +336,14 @@ mod tests {
         ifreq::set_name(&mut ifreq, &IFNAME);
         ifreq::set_lladdr(&mut ifreq, &LLADDR);
 
-        LibcSocket()
-            .open_local_dgram()?
-            .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
+        open_local_dgram()?.set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
 
         Ok(())
     }
 
     #[test]
     fn test_open_socket_set_lladdr_error() -> Result<()> {
-        sys::mockdown()
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -441,8 +368,7 @@ mod tests {
         ifreq::set_name(&mut ifreq, &IFNAME);
         ifreq::set_lladdr(&mut ifreq, &LLADDR);
 
-        let error = LibcSocket()
-            .open_local_dgram()?
+        let error = open_local_dgram()?
             .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))
             .unwrap_err();
 
@@ -454,7 +380,7 @@ mod tests {
 
     #[test]
     fn test_open_socket_close() {
-        sys::mockdown()
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -464,16 +390,14 @@ mod tests {
                 RETURN_SUCCESS
             });
 
-        let socket = LibcSocket();
-
-        let open_socket = socket.open_local_dgram().unwrap();
+        let open_socket = open_local_dgram().unwrap();
 
         drop(open_socket);
     }
 
     #[test]
     fn test_open_socket_close_error() {
-        sys::mockdown()
+        mockdown()
             .expect(|args| {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
@@ -487,9 +411,7 @@ mod tests {
                 libc::EINTR
             });
 
-        let socket = LibcSocket();
-
-        let open_socket = socket.open_local_dgram().unwrap();
+        let open_socket = open_local_dgram().unwrap();
 
         drop(open_socket);
     }
