@@ -8,29 +8,21 @@ use super::socket;
 #[cfg(test)]
 use mocks::socket;
 
-pub struct Nic();
+pub fn get_lladd(ifname: &IfName) -> Result<LinkLevelAddress> {
+    let mut ifreq = ifreq::new();
+    ifreq::set_name(&mut ifreq, ifname);
 
-impl Nic {
-    pub fn new() -> Self {
-        Self()
-    }
+    socket::open_local_dgram()?.get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
 
-    pub fn get_lladd(&self, ifname: &IfName) -> Result<LinkLevelAddress> {
-        let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, ifname);
+    Ok(ifreq::get_lladdr(&ifreq))
+}
 
-        socket::open_local_dgram()?.get_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
+pub fn set_lladd(ifname: &IfName, lladdr: &LinkLevelAddress) -> Result<()> {
+    let mut ifreq = ifreq::new();
+    ifreq::set_name(&mut ifreq, ifname);
+    ifreq::set_lladdr(&mut ifreq, lladdr);
 
-        Ok(ifreq::get_lladdr(&ifreq))
-    }
-
-    pub fn set_lladd(&self, ifname: &IfName, lladdr: &LinkLevelAddress) -> Result<()> {
-        let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, ifname);
-        ifreq::set_lladdr(&mut ifreq, lladdr);
-
-        socket::open_local_dgram()?.set_lladdr(ifreq::as_mut_ptr(&mut ifreq))
-    }
+    socket::open_local_dgram()?.set_lladdr(ifreq::as_mut_ptr(&mut ifreq))
 }
 
 #[cfg(test)]
@@ -97,11 +89,11 @@ mod tests {
 
     use mockdown::{mockdown, Mock};
 
-    use crate::{IfName, LinkLevelAddress, Nic};
+    use crate::{IfName, LinkLevelAddress};
 
     use super::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-
     use super::mocks::socket::{self, MockResult, OpenSocket};
+    use super::{get_lladd, set_lladd};
 
     static IFNAME: LazyLock<IfName> = LazyLock::new(|| "enx".try_into().unwrap());
     static LLADDR: LazyLock<LinkLevelAddress> =
@@ -120,7 +112,7 @@ mod tests {
                 MockResult::ok()
             });
 
-        let lladdr = Nic::new().get_lladd(&IFNAME).unwrap();
+        let lladdr = get_lladd(&IFNAME).unwrap();
 
         assert_eq!(lladdr, *LLADDR);
     }
@@ -134,7 +126,7 @@ mod tests {
 
         let expected_error = "GetLinkLevelAddressOpenError";
 
-        let error = Nic::new().get_lladd(&IFNAME).unwrap_err();
+        let error = get_lladd(&IFNAME).unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
     }
@@ -154,7 +146,7 @@ mod tests {
 
         let expected_error = "GetLinkLevelAddressError";
 
-        let error = Nic::new().get_lladd(&IFNAME).unwrap_err();
+        let error = get_lladd(&IFNAME).unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
     }
@@ -172,7 +164,7 @@ mod tests {
                 MockResult::ok()
             });
 
-        Nic::new().set_lladd(&IFNAME, &LLADDR).unwrap();
+        set_lladd(&IFNAME, &LLADDR).unwrap();
     }
 
     #[test]
@@ -184,7 +176,7 @@ mod tests {
 
         let expected_error = "SetLinkLevelAddressOpenError";
 
-        let error = Nic::new().set_lladd(&IFNAME, &LLADDR).unwrap_err();
+        let error = set_lladd(&IFNAME, &LLADDR).unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
     }
@@ -204,7 +196,7 @@ mod tests {
 
         let expected_error = "SetLinkLevelAddressError";
 
-        let error = Nic::new().set_lladd(&IFNAME, &LLADDR).unwrap_err();
+        let error = set_lladd(&IFNAME, &LLADDR).unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
     }

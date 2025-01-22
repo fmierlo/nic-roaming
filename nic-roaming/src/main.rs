@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use net_sys::{IfName, LLAddr, Nic};
+use net_sys::{IfName, LLAddr, nic};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let action = std::env::args().nth(1);
@@ -10,14 +10,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     match action.ok_or("Missing action param: [get | set]")?.as_str() {
         "get" => {
             let ifname: IfName = ifname.ok_or("Missing ifname param")?.try_into()?;
-            let lladdr = Nic::new().get_lladd(&ifname)?;
-            eprintln!("Nic.get_lladd({ifname}) -> {lladdr}");
+            let lladdr = nic::get_lladd(&ifname)?;
+            eprintln!("nic::get_lladd({ifname}) -> {lladdr}");
         }
         "set" => {
             let ifname: IfName = ifname.ok_or("Missing ifname param")?.try_into()?;
             let lladdr: LLAddr = lladdr.ok_or("Missing lladdr param")?.parse()?;
-            Nic::new().set_lladd(&ifname, &lladdr)?;
-            eprintln!("Nic.set_lladd({ifname}, {lladdr})");
+            nic::set_lladd(&ifname, &lladdr)?;
+            eprintln!("nic::set_lladd({ifname}, {lladdr})");
         }
         invalid => {
             return Err(format!("Invalid action: {invalid}").into());
