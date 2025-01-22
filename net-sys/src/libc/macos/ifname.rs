@@ -1,5 +1,8 @@
+use std::ffi::CString;
+use std::ops::Deref;
+use std::ptr;
+
 use core::fmt::{Debug, Display};
-use std::{ffi::CString, ops::Deref, ptr};
 
 const IF_NAME_SIZE: libc::size_t = libc::IFNAMSIZ;
 const IF_NAME_MIN: libc::size_t = 3;

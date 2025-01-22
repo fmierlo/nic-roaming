@@ -1,7 +1,8 @@
-use super::ifname::IfName;
-use crate::LinkLevelAddress;
-use libc::{c_void, ifreq};
 use std::ptr;
+
+use libc::{c_void, ifreq};
+
+use crate::{IfName, LinkLevelAddress};
 
 pub(super) fn new() -> ifreq {
     unsafe { std::mem::zeroed() }
@@ -43,6 +44,10 @@ pub(super) fn get_lladdr(ifreq: &ifreq) -> LinkLevelAddress {
 #[cfg(test)]
 mod tests {
     use libc::{c_char, c_void};
+
+    use crate::{IfName, LinkLevelAddress};
+
+    use super::{as_mut_ptr, from_mut_ptr, get_lladdr, get_name, new, set_lladdr, set_name};
 
     const IFREQ_SIZE: usize = 32;
     const NAME_SIZE: usize = 16;
@@ -104,66 +109,66 @@ mod tests {
     fn test_ifreq_new() {
         let expected_ifreq = unsafe { std::mem::zeroed() };
 
-        let ifreq = super::new();
+        let ifreq = new();
 
         assert_eq!(IfReq(&ifreq), IfReq(&expected_ifreq));
     }
 
     #[test]
     fn test_ifreq_as_mut_ptr() {
-        let mut ifreq = super::new();
+        let mut ifreq = new();
         let exptected_ifreq_ptr = &ifreq as *const _ as *mut c_void;
 
-        let ifreq_ptr = super::as_mut_ptr(&mut ifreq);
+        let ifreq_ptr = as_mut_ptr(&mut ifreq);
 
         assert_eq!(ifreq_ptr, exptected_ifreq_ptr);
     }
 
     #[test]
     fn test_ifreq_from_mut_ptr() {
-        let mut expected_ifreq = super::new();
+        let mut expected_ifreq = new();
         let ifreq_ptr = &expected_ifreq as *const _ as *mut c_void;
 
-        let ifreq = super::from_mut_ptr(ifreq_ptr);
+        let ifreq = from_mut_ptr(ifreq_ptr);
 
         assert_eq!(IfReq(ifreq), IfReq(&mut expected_ifreq));
     }
 
     #[test]
     fn test_ifreq_set_name() {
-        let mut ifreq = super::new();
+        let mut ifreq = new();
 
-        super::set_name(&mut ifreq, &super::IfName::from(&NAME));
+        set_name(&mut ifreq, &IfName::from(&NAME));
 
         assert_eq!(ifreq.ifr_name, NAME);
     }
 
     #[test]
     fn test_ifreq_get_name() {
-        let mut ifreq = super::new();
+        let mut ifreq = new();
         unsafe {
             std::ptr::copy_nonoverlapping(NAME.as_ptr(), ifreq.ifr_name.as_mut_ptr(), NAME.len());
         }
 
-        let ifname = super::get_name(&mut ifreq);
+        let ifname = get_name(&mut ifreq);
 
         assert_eq!(*ifname, NAME);
     }
 
     #[test]
     fn test_ifreq_set_lladdr() {
-        let mut ifreq = super::new();
+        let mut ifreq = new();
         let sa_data_ptr =
             unsafe { &*(&ifreq.ifr_ifru.ifru_addr.sa_data as *const _ as *const [u8; 6]) };
 
-        super::set_lladdr(&mut ifreq, &super::LinkLevelAddress::from(&LLADDR));
+        set_lladdr(&mut ifreq, &LinkLevelAddress::from(&LLADDR));
 
         assert_eq!(*sa_data_ptr, LLADDR);
     }
 
     #[test]
     fn test_ifreq_get_lladdr() {
-        let mut ifreq = super::new();
+        let mut ifreq = new();
         unsafe {
             std::ptr::copy_nonoverlapping(
                 LLADDR.as_ptr(),
@@ -172,7 +177,7 @@ mod tests {
             );
         }
 
-        let lladdr = super::get_lladdr(&mut ifreq);
+        let lladdr = get_lladdr(&mut ifreq);
 
         assert_eq!(*lladdr, LLADDR);
     }

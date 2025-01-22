@@ -1,7 +1,12 @@
-use super::ifname::IfName;
-use super::ifreq::{self};
-use super::socket::BoxSocket;
-use crate::{LinkLevelAddress, Result};
+use crate::{IfName, LinkLevelAddress, Result};
+
+use super::ifreq;
+
+#[cfg(not(test))]
+use super::socket;
+
+#[cfg(test)]
+use mocks::socket;
 
 #[derive(Debug, Default)]
 pub struct Nic {
@@ -34,11 +39,11 @@ impl Nic {
 #[cfg(test)]
 pub(crate) mod mocks {
     pub(crate) mod socket {
-        use crate::sys::os::socket::{OpenSocket, Socket, SocketResult};
-        use crate::Result;
-        use mockdown::{Mockdown, Static};
         use std::fmt::Debug;
-        use std::{cell::RefCell, thread::LocalKey};
+
+        use mockdown::{mockdown, Mock};
+
+        use crate::Result;
 
         thread_local! {
             static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
@@ -106,12 +111,15 @@ pub(crate) mod mocks {
 
 #[cfg(test)]
 mod tests {
-    use super::super::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-    use super::mocks::socket::{self, MockOpenSocket, MockResult, MockSocket};
-    use super::BoxSocket;
-    use crate::{IfName, LinkLevelAddress, Nic};
-    use mockdown::Static;
     use std::sync::LazyLock;
+
+    use mockdown::{mockdown, Mock};
+
+    use crate::{IfName, LinkLevelAddress, Nic};
+
+    use super::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
+
+    use super::mocks::socket::{self, MockResult, OpenSocket};
 
     impl Nic {
         fn new(socket: &MockSocket) -> Nic {

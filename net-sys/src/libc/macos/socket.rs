@@ -1,8 +1,8 @@
-use super::ifname::IfName;
-use super::ifreq::{self};
-use crate::{LinkLevelAddress, Result};
 use std::fmt::{Debug, Display};
-use std::ops::Deref;
+
+use crate::{IfName, LinkLevelAddress, Result};
+
+use super::ifreq;
 
 #[cfg(not(test))]
 use super::sys;
@@ -163,14 +163,13 @@ impl Drop for LibcOpenSocket {
 #[cfg(test)]
 pub(crate) mod mocks {
     pub(crate) mod sys {
-        use crate::sys::os::sys;
         use libc::{c_int, c_ulong, c_void};
-        use mockdown::Mockdown;
-        use mockdown::Static;
-        use std::{cell::RefCell, thread::LocalKey};
+
+        use mockdown::{mockdown, Mock};
+
+        use crate::sys::os::sys;
 
         pub(crate) use sys::{strerror, SIOCGIFLLADDR, SIOCSIFLLADDR};
-
         thread_local! {
             static MOCKDOWN: RefCell<Mockdown> = Mockdown::thread_local();
         }
@@ -212,11 +211,17 @@ pub(crate) mod mocks {
 
 #[cfg(test)]
 mod tests {
-    use super::mocks::sys;
-    use super::{ifreq, IfName, LibcSocket, LinkLevelAddress, Result, Socket};
-    use crate::sys::os::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
-    use mockdown::Static;
     use std::sync::LazyLock;
+
+    use mockdown::{mockdown, Mock};
+
+    use crate::{IfName, LinkLevelAddress, Result};
+
+    use super::{ifreq, open_local_dgram};
+
+    use super::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
+
+    use super::mocks::sys;
 
     static IFNAME: LazyLock<IfName> = LazyLock::new(|| "enx".try_into().unwrap());
     static LLADDR: LazyLock<LinkLevelAddress> =
@@ -322,7 +327,7 @@ mod tests {
                 RETURN_FD
             })
             .expect(|sys::IoCtl(args, ifreq)| {
-                assert_eq!((MOCK_FD, super::sys::SIOCGIFLLADDR), args);
+                assert_eq!((MOCK_FD, sys::SIOCGIFLLADDR), args);
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 ifreq_set_lladdr(ifreq, *LLADDR);
                 RETURN_SUCCESS
@@ -352,7 +357,7 @@ mod tests {
                 RETURN_FD
             })
             .expect(|sys::IoCtl(args, ifreq)| {
-                assert_eq!((MOCK_FD, super::sys::SIOCGIFLLADDR), args);
+                assert_eq!((MOCK_FD, sys::SIOCGIFLLADDR), args);
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 RETURN_FAILURE
             })
@@ -388,7 +393,7 @@ mod tests {
                 RETURN_FD
             })
             .expect(|sys::IoCtl(args, ifreq)| {
-                assert_eq!((MOCK_FD, super::sys::SIOCSIFLLADDR), args);
+                assert_eq!((MOCK_FD, sys::SIOCSIFLLADDR), args);
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
                 RETURN_SUCCESS
@@ -417,7 +422,7 @@ mod tests {
                 RETURN_FD
             })
             .expect(|sys::IoCtl(args, ifreq)| {
-                assert_eq!((MOCK_FD, super::sys::SIOCSIFLLADDR), args);
+                assert_eq!((MOCK_FD, sys::SIOCSIFLLADDR), args);
                 assert_eq!(ifreq_get_name(ifreq), *IFNAME);
                 assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
                 RETURN_FAILURE

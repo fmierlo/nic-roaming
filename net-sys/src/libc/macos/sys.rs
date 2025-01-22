@@ -1,8 +1,9 @@
-use super::ioccom;
-use ::libc::c_ulong;
+use libc::c_ulong;
 
 #[cfg(not(test))]
 use libc::{c_int, c_void};
+
+use super::ioccom;
 
 const IFREQ_SIZE: c_ulong = 32;
 
@@ -36,8 +37,8 @@ pub(crate) fn errno() -> c_int {
     unsafe { *libc::__error() }
 }
 
-pub(crate) fn strerror(errno: ::libc::c_int) -> String {
-    let ptr = unsafe { ::libc::strerror(errno) };
+pub(crate) fn strerror(errno: libc::c_int) -> String {
+    let ptr = unsafe { libc::strerror(errno) };
     let c_str = unsafe { std::ffi::CStr::from_ptr(ptr) };
     c_str.to_bytes().escape_ascii().to_string()
 }
@@ -46,28 +47,30 @@ pub(crate) fn strerror(errno: ::libc::c_int) -> String {
 mod tests {
     use libc::c_ulong;
 
+    use super::{strerror, IFREQ_SIZE, SIOCGIFLLADDR, SIOCSIFLLADDR};
+
     #[test]
     fn test_ifreq_size() {
         let expected_size: c_ulong = std::mem::size_of::<libc::ifreq>().try_into().unwrap();
 
-        assert_eq!(super::IFREQ_SIZE, expected_size);
+        assert_eq!(IFREQ_SIZE, expected_size);
     }
 
     #[test]
     fn test_get_link_level_addr() {
-        assert_eq!(super::SIOCGIFLLADDR, 0xc020699e)
+        assert_eq!(SIOCGIFLLADDR, 0xc020699e)
     }
 
     #[test]
     fn test_set_link_level_addr() {
-        assert_eq!(super::SIOCSIFLLADDR, 0x8020693c)
+        assert_eq!(SIOCSIFLLADDR, 0x8020693c)
     }
 
     #[test]
     fn test_sys_strerror() {
         let errno = 1;
 
-        let strerror = super::strerror(errno);
+        let strerror = strerror(errno);
 
         assert_eq!(strerror, "Operation not permitted");
     }
@@ -76,7 +79,7 @@ mod tests {
     fn test_sys_strerror_undefined_errno() {
         let errno = 0;
 
-        let strerror = super::strerror(errno);
+        let strerror = strerror(errno);
 
         assert_eq!(strerror, "Undefined error: 0");
     }
@@ -85,7 +88,7 @@ mod tests {
     fn test_sys_strerror_unknown_errno() {
         let errno = -1;
 
-        let strerror = super::strerror(errno);
+        let strerror = strerror(errno);
 
         assert_eq!(strerror, "Unknown error: -1");
     }

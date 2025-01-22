@@ -20,8 +20,9 @@ pub mod sys {
     }
 }
 
-pub use lladdr::{LLAddr, LinkLevelAddress};
 use std::result;
+
+pub use lladdr::{LLAddr, LinkLevelAddress};
 pub use sys::os::{ifname::IfName, nic::Nic};
 
 pub type Result<T> = result::Result<T, Box<dyn std::error::Error>>;

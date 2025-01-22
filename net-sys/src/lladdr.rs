@@ -1,5 +1,8 @@
+use std::ops::Deref;
+use std::result::Result;
+use std::str::FromStr;
+
 use core::fmt::{Debug, Display};
-use std::{ops::Deref, result::Result, str::FromStr};
 
 const OCTETS_SIZE: usize = 6;
 
@@ -122,8 +125,9 @@ impl FromStr for LinkLevelAddress {
 
 #[cfg(test)]
 mod tests {
-    use super::{FromStr, LinkLevelAddress, OctetsType};
     use std::collections::HashMap;
+
+    use super::{FromStr, LinkLevelAddress, OctetsType};
 
     const LLADDR_SIZE: usize = 6;
     const OCTETS: OctetsType = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
