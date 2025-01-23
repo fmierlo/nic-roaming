@@ -7,7 +7,7 @@ edition = "2021"
 libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
-mockdown = "0.4"
+mockdown = { version = "0.4", path = "../../mockdown" }
 
 [features]
 default = [ "libc" ]
