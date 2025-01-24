@@ -134,7 +134,7 @@ pub(crate) mod mocks {
 
         use mockdown::{mockdown, Mock};
 
-        use crate::sys::os::sys;
+        use super::super::super::sys;
 
         pub(crate) use sys::{strerror, SIOCGIFLLADDR, SIOCSIFLLADDR};
 

@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use net_sys::{IfName, LLAddr, nic};
+use net_sys::{nic, IfName, LLAddr};
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<(), Box<dyn Error>> {

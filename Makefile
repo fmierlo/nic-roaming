@@ -13,6 +13,7 @@ clean:
 
 check:
 	cargo clippy
+	cargo fmt --check
 
 test-deps:
 	cargo install cargo-tarpaulin

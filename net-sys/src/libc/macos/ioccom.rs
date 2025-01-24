@@ -7,7 +7,7 @@
 use libc::c_ulong;
 
 // param char 'i' as c_ulong
-pub(super) const I: c_ulong = 105;
+pub(crate) const I: c_ulong = 105;
 // parameter length, at most 13 bits
 const IOCPARM_MASK: c_ulong = 0x1fff;
 // copy parameters out
@@ -23,11 +23,11 @@ const fn ioc(inout: c_ulong, group: c_ulong, num: c_ulong, len: c_ulong) -> c_ul
 }
 
 #[cfg(not(tarpaulin_include))]
-pub(super) const fn iow(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
+pub(crate) const fn iow(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
     ioc(IOC_IN, group, num, len)
 }
 
 #[cfg(not(tarpaulin_include))]
-pub(super) const fn iorw(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
+pub(crate) const fn iorw(group: c_ulong, num: c_ulong, len: c_ulong) -> c_ulong {
     ioc(IOC_INOUT, group, num, len)
 }
