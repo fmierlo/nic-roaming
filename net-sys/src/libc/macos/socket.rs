@@ -1,9 +1,10 @@
 use std::fmt::{Debug, Display};
 
-use crate::{IfName, LinkLevelAddress, Result};
+use crate::ifname::IfName;
+use crate::lladdr::LinkLevelAddress;
+use crate::Result;
 
-use super::ifreq;
-
+use super::ifreq::{IfReq, PtrAsIfReq};
 #[cfg(not(test))]
 use super::sys;
 
@@ -85,27 +86,25 @@ pub(crate) struct OpenSocket {
 }
 
 impl OpenSocket {
-    pub(crate) fn get_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
+    pub(crate) fn get_lladdr(&self, ifreq_ptr: *mut libc::c_void) -> Result<()> {
         let fd = self.fd;
-        match sys::ioctl(fd, sys::SIOCGIFLLADDR, arg) {
+        match sys::ioctl(fd, sys::SIOCGIFLLADDR, ifreq_ptr) {
             0 => Ok(()),
             ret => {
-                let ifreq = ifreq::from_mut_ptr(arg);
-                let ifname = ifreq::get_name(ifreq);
+                let ifname = ifreq_ptr.as_ifreq().name();
                 let errno = sys::errno();
                 Err(Error::GetLinkLevelAddress(fd, ifname, ret, errno).into())
             }
         }
     }
 
-    pub(crate) fn set_lladdr(&self, arg: *mut libc::c_void) -> Result<()> {
+    pub(crate) fn set_lladdr(&self, ifreq_ptr: *mut libc::c_void) -> Result<()> {
         let fd = self.fd;
-        match sys::ioctl(fd, sys::SIOCSIFLLADDR, arg) {
+        match sys::ioctl(fd, sys::SIOCSIFLLADDR, ifreq_ptr) {
             0 => Ok(()),
             ret => {
-                let ifreq = ifreq::from_mut_ptr(arg);
-                let ifname = ifreq::get_name(ifreq);
-                let lladdr = ifreq::get_lladdr(ifreq);
+                let ifname = ifreq_ptr.as_ifreq().name();
+                let lladdr = ifreq_ptr.as_ifreq().lladdr();
                 let errno = sys::errno();
                 Err(Error::SetLinkLevelAddress(fd, ifname, lladdr, ret, errno).into())
             }
@@ -152,8 +151,8 @@ pub(crate) mod mocks {
             mockdown().mock(args).unwrap()
         }
 
-        pub(crate) fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int {
-            let args = IoCtl((fd, request), arg);
+        pub(crate) fn ioctl(fd: c_int, request: c_ulong, ifreq_ptr: *mut c_void) -> c_int {
+            let args = IoCtl((fd, request), ifreq_ptr);
             mockdown().mock(args).unwrap()
         }
 
@@ -175,11 +174,12 @@ mod tests {
 
     use mockdown::{mockdown, Mock};
 
-    use crate::{IfName, LinkLevelAddress, Result};
+    use crate::ifname::IfName;
+    use crate::ifreq::{self, IfReq, IfReqAsPtr, IfReqMut, IfReqWith, PtrAsIfReq};
+    use crate::lladdr::LinkLevelAddress;
+    use crate::Result;
 
-    use super::{ifreq, open_local_dgram, OpenSocket};
-
-    use super::ifreq::mock::{ifreq_get_lladdr, ifreq_get_name, ifreq_set_lladdr};
+    use super::{open_local_dgram, OpenSocket};
 
     use super::mocks::sys;
 
@@ -257,10 +257,10 @@ mod tests {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
             })
-            .expect(|sys::IoCtl(args, ifreq)| {
+            .expect(|sys::IoCtl(args, ifreq_ptr)| {
                 assert_eq!((MOCK_FD, sys::SIOCGIFLLADDR), args);
-                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
-                ifreq_set_lladdr(ifreq, *LLADDR);
+                assert_eq!(ifreq_ptr.as_ifreq().name(), *IFNAME);
+                ifreq_ptr.as_ifreq().change_lladdr(&LLADDR);
                 RETURN_SUCCESS
             })
             .expect(|args| {
@@ -268,14 +268,11 @@ mod tests {
                 RETURN_SUCCESS
             });
 
-        let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &IFNAME);
+        let mut ifreq = ifreq::new().with_name(&IFNAME);
 
-        open_local_dgram()?
-            .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))
-            .unwrap();
+        open_local_dgram()?.get_lladdr(ifreq.as_mut_ptr()).unwrap();
 
-        assert_eq!(ifreq::get_lladdr(&ifreq), *LLADDR);
+        assert_eq!(ifreq.lladdr(), *LLADDR);
         Ok(())
     }
 
@@ -286,9 +283,9 @@ mod tests {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
             })
-            .expect(|sys::IoCtl(args, ifreq)| {
+            .expect(|sys::IoCtl(args, ifreq_ptr)| {
                 assert_eq!((MOCK_FD, sys::SIOCGIFLLADDR), args);
-                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
+                assert_eq!(ifreq_ptr.as_ifreq().name(), *IFNAME);
                 RETURN_FAILURE
             })
             .expect(|_: sys::ErrNo| {
@@ -301,11 +298,10 @@ mod tests {
             });
 
         let expected_error = "Socket::GetLinkLevelAddressError { fd: 3, ifname: \"enx\", ret: -1, errno: 9, strerror: \"Bad file descriptor\" }";
-        let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &IFNAME);
+        let mut ifreq = ifreq::new().with_name(&IFNAME);
 
         let error = open_local_dgram()?
-            .get_lladdr(ifreq::as_mut_ptr(&mut ifreq))
+            .get_lladdr(ifreq.as_mut_ptr())
             .unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
@@ -321,10 +317,10 @@ mod tests {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
             })
-            .expect(|sys::IoCtl(args, ifreq)| {
+            .expect(|sys::IoCtl(args, ifreq_ptr)| {
                 assert_eq!((MOCK_FD, sys::SIOCSIFLLADDR), args);
-                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
-                assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
+                assert_eq!(ifreq_ptr.as_ifreq().name(), *IFNAME);
+                assert_eq!(ifreq_ptr.as_ifreq().lladdr(), *LLADDR);
                 RETURN_SUCCESS
             })
             .expect(|args| {
@@ -332,11 +328,9 @@ mod tests {
                 RETURN_SUCCESS
             });
 
-        let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &IFNAME);
-        ifreq::set_lladdr(&mut ifreq, &LLADDR);
+        let mut ifreq = ifreq::new().with_name(&IFNAME).with_lladdr(&LLADDR);
 
-        open_local_dgram()?.set_lladdr(ifreq::as_mut_ptr(&mut ifreq))?;
+        open_local_dgram()?.set_lladdr(ifreq.as_mut_ptr())?;
 
         Ok(())
     }
@@ -348,10 +342,10 @@ mod tests {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FD
             })
-            .expect(|sys::IoCtl(args, ifreq)| {
+            .expect(|sys::IoCtl(args, ifreq_ptr)| {
                 assert_eq!((MOCK_FD, sys::SIOCSIFLLADDR), args);
-                assert_eq!(ifreq_get_name(ifreq), *IFNAME);
-                assert_eq!(ifreq_get_lladdr(ifreq), *LLADDR);
+                assert_eq!(ifreq_ptr.as_ifreq().name(), *IFNAME);
+                assert_eq!(ifreq_ptr.as_ifreq().lladdr(), *LLADDR);
                 RETURN_FAILURE
             })
             .expect(|_: sys::ErrNo| {
@@ -364,12 +358,10 @@ mod tests {
             });
 
         let expected_error = "Socket::SetLinkLevelAddressError { fd: 3, ifname: \"enx\", lladdr: \"00:11:22:33:44:55\", ret: -1, errno: 22, strerror: \"Invalid argument\" }";
-        let mut ifreq = ifreq::new();
-        ifreq::set_name(&mut ifreq, &IFNAME);
-        ifreq::set_lladdr(&mut ifreq, &LLADDR);
+        let mut ifreq = ifreq::new().with_name(&IFNAME).with_lladdr(&LLADDR);
 
         let error = open_local_dgram()?
-            .set_lladdr(ifreq::as_mut_ptr(&mut ifreq))
+            .set_lladdr(ifreq.as_mut_ptr())
             .unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
