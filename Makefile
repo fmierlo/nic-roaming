@@ -1,21 +1,24 @@
 
-.PHONY: run clean install test test~% report
-
-export RUST_BACKTRACE=1
+.PHONY: run clean check dev-deps test test~% report
 
 TARPAULIN_FLAGS := --output-dir target/tarpaulin --out Stdout --out Html
 
 run: check
 	cargo run $(args)
 
+build: check
+	cargo doc
+	cargo build
+
 clean:
 	cargo clean
 
 check:
+	cargo check --all-targets
+	cargo fmt --all --check
 	cargo clippy
-	cargo fmt --check
 
-test-deps:
+dev-deps:
 	cargo install cargo-tarpaulin
 
 test: check
@@ -26,3 +29,6 @@ test~%:
 
 report: test
 	open target/tarpaulin/tarpaulin-report.html
+
+open: build
+	cargo doc --open
