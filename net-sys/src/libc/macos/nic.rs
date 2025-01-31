@@ -3,7 +3,7 @@ use crate::ifreq::IfReq;
 use crate::lladdr::LinkLevelAddress;
 use crate::Result;
 
-use super::ifreq::{self, IfReqAsPtr, IfReqWith};
+use super::ifreq::{self, IfReqWith};
 #[cfg(not(test))]
 use super::socket;
 
@@ -13,7 +13,7 @@ use mocks::socket;
 pub fn get_lladdr(ifname: &IfName) -> Result<LinkLevelAddress> {
     let mut ifreq = ifreq::new().with_name(ifname);
 
-    socket::open_local_dgram()?.get_lladdr(ifreq.as_mut_ptr())?;
+    socket::open_local_dgram()?.get_lladdr(&mut ifreq)?;
 
     Ok(ifreq.lladdr())
 }
@@ -21,7 +21,7 @@ pub fn get_lladdr(ifname: &IfName) -> Result<LinkLevelAddress> {
 pub fn set_lladdr(ifname: &IfName, lladdr: &LinkLevelAddress) -> Result<()> {
     let mut ifreq = ifreq::new().with_name(ifname).with_lladdr(lladdr);
 
-    socket::open_local_dgram()?.set_lladdr(ifreq.as_mut_ptr())
+    socket::open_local_dgram()?.set_lladdr(&mut ifreq)
 }
 
 #[cfg(test)]
@@ -33,12 +33,12 @@ pub(crate) mod mocks {
 
         use crate::Result;
 
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug)]
         pub(crate) struct OpenLocalDgram();
-        #[derive(Debug, PartialEq)]
-        pub(crate) struct GetLLAddr(pub *mut libc::c_void);
-        #[derive(Debug, PartialEq)]
-        pub(crate) struct SetLLAddr(pub *mut libc::c_void);
+        #[derive(Debug)]
+        pub(crate) struct GetLLAddr(pub *mut libc::ifreq);
+        #[derive(Debug)]
+        pub(crate) struct SetLLAddr(pub *mut libc::ifreq);
 
         pub(crate) struct MockResult {}
 
@@ -69,13 +69,13 @@ pub(crate) mod mocks {
                 Result::<OpenSocket>::Err(error.into())
             }
 
-            pub(crate) fn get_lladdr(&self, ifreq_ptr: *mut libc::c_void) -> Result<()> {
-                let args = GetLLAddr(ifreq_ptr);
+            pub(crate) fn get_lladdr(&self, ifreq: &mut libc::ifreq) -> Result<()> {
+                let args = GetLLAddr(ifreq);
                 mockdown().mock(args)?
             }
 
-            pub(crate) fn set_lladdr(&self, ifreq_ptr: *mut libc::c_void) -> Result<()> {
-                let args = SetLLAddr(ifreq_ptr);
+            pub(crate) fn set_lladdr(&self, ifreq: &mut libc::ifreq) -> Result<()> {
+                let args = SetLLAddr(ifreq);
                 mockdown().mock(args)?
             }
         }
@@ -89,7 +89,8 @@ mod tests {
     use mockdown::{mockdown, Mock};
 
     use crate::ifname::IfName;
-    use crate::ifreq::{IfReq, IfReqMut, PtrAsIfReq};
+    use crate::ifreq::tests::PtrAsIfReq;
+    use crate::ifreq::{IfReq, IfReqMut};
     use crate::lladdr::LinkLevelAddress;
 
     use super::mocks::socket::{self, MockResult, OpenSocket};

@@ -4,7 +4,7 @@ use crate::ifname::IfName;
 use crate::lladdr::LinkLevelAddress;
 use crate::Result;
 
-use super::ifreq::{IfReq, PtrAsIfReq};
+use super::ifreq::{IfReq, IfReqAsPtr};
 #[cfg(not(test))]
 use super::sys;
 
@@ -86,25 +86,25 @@ pub(crate) struct OpenSocket {
 }
 
 impl OpenSocket {
-    pub(crate) fn get_lladdr(&self, ifreq_ptr: *mut libc::c_void) -> Result<()> {
+    pub(crate) fn get_lladdr(&self, ifreq: &mut libc::ifreq) -> Result<()> {
         let fd = self.fd;
-        match sys::ioctl(fd, sys::SIOCGIFLLADDR, ifreq_ptr) {
+        match sys::ioctl(fd, sys::SIOCGIFLLADDR, ifreq.as_mut_ptr()) {
             0 => Ok(()),
             ret => {
-                let ifname = ifreq_ptr.as_ifreq().name();
+                let ifname = ifreq.name();
                 let errno = sys::errno();
                 Err(Error::GetLinkLevelAddress(fd, ifname, ret, errno).into())
             }
         }
     }
 
-    pub(crate) fn set_lladdr(&self, ifreq_ptr: *mut libc::c_void) -> Result<()> {
+    pub(crate) fn set_lladdr(&self, ifreq: &mut libc::ifreq) -> Result<()> {
         let fd = self.fd;
-        match sys::ioctl(fd, sys::SIOCSIFLLADDR, ifreq_ptr) {
+        match sys::ioctl(fd, sys::SIOCSIFLLADDR, ifreq.as_mut_ptr()) {
             0 => Ok(()),
             ret => {
-                let ifname = ifreq_ptr.as_ifreq().name();
-                let lladdr = ifreq_ptr.as_ifreq().lladdr();
+                let ifname = ifreq.name();
+                let lladdr = ifreq.lladdr();
                 let errno = sys::errno();
                 Err(Error::SetLinkLevelAddress(fd, ifname, lladdr, ret, errno).into())
             }
@@ -175,7 +175,8 @@ mod tests {
     use mockdown::{mockdown, Mock};
 
     use crate::ifname::IfName;
-    use crate::ifreq::{self, IfReq, IfReqAsPtr, IfReqMut, IfReqWith, PtrAsIfReq};
+    use crate::ifreq::tests::PtrAsIfReq;
+    use crate::ifreq::{self, IfReq, IfReqMut, IfReqWith};
     use crate::lladdr::LinkLevelAddress;
     use crate::Result;
 
@@ -223,7 +224,7 @@ mod tests {
                 assert_eq!(MOCK_SOCKET, args);
                 RETURN_FAILURE
             })
-            .expect(|_: sys::ErrNo| {
+            .expect(|sys::ErrNo()| {
                 assert!(true);
                 libc::EPERM
             });
@@ -270,7 +271,7 @@ mod tests {
 
         let mut ifreq = ifreq::new().with_name(&IFNAME);
 
-        open_local_dgram()?.get_lladdr(ifreq.as_mut_ptr()).unwrap();
+        open_local_dgram()?.get_lladdr(&mut ifreq).unwrap();
 
         assert_eq!(ifreq.lladdr(), *LLADDR);
         Ok(())
@@ -288,7 +289,7 @@ mod tests {
                 assert_eq!(ifreq_ptr.as_ifreq().name(), *IFNAME);
                 RETURN_FAILURE
             })
-            .expect(|_: sys::ErrNo| {
+            .expect(|sys::ErrNo()| {
                 assert!(true);
                 libc::EBADF
             })
@@ -300,9 +301,7 @@ mod tests {
         let expected_error = "Socket::GetLinkLevelAddressError { fd: 3, ifname: \"enx\", ret: -1, errno: 9, strerror: \"Bad file descriptor\" }";
         let mut ifreq = ifreq::new().with_name(&IFNAME);
 
-        let error = open_local_dgram()?
-            .get_lladdr(ifreq.as_mut_ptr())
-            .unwrap_err();
+        let error = open_local_dgram()?.get_lladdr(&mut ifreq).unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
         assert_eq!(format!("{:?}", error), expected_error);
@@ -330,7 +329,7 @@ mod tests {
 
         let mut ifreq = ifreq::new().with_name(&IFNAME).with_lladdr(&LLADDR);
 
-        open_local_dgram()?.set_lladdr(ifreq.as_mut_ptr())?;
+        open_local_dgram()?.set_lladdr(&mut ifreq)?;
 
         Ok(())
     }
@@ -348,7 +347,7 @@ mod tests {
                 assert_eq!(ifreq_ptr.as_ifreq().lladdr(), *LLADDR);
                 RETURN_FAILURE
             })
-            .expect(|_: sys::ErrNo| {
+            .expect(|sys::ErrNo()| {
                 assert!(true);
                 libc::EINVAL
             })
@@ -360,9 +359,7 @@ mod tests {
         let expected_error = "Socket::SetLinkLevelAddressError { fd: 3, ifname: \"enx\", lladdr: \"00:11:22:33:44:55\", ret: -1, errno: 22, strerror: \"Invalid argument\" }";
         let mut ifreq = ifreq::new().with_name(&IFNAME).with_lladdr(&LLADDR);
 
-        let error = open_local_dgram()?
-            .set_lladdr(ifreq.as_mut_ptr())
-            .unwrap_err();
+        let error = open_local_dgram()?.set_lladdr(&mut ifreq).unwrap_err();
 
         assert_eq!(format!("{}", error), expected_error);
         assert_eq!(format!("{:?}", error), expected_error);
@@ -398,7 +395,7 @@ mod tests {
                 assert_eq!(MOCK_CLOSE, args);
                 RETURN_FAILURE
             })
-            .expect(|_: sys::ErrNo| {
+            .expect(|sys::ErrNo()| {
                 assert!(true);
                 libc::EINTR
             });

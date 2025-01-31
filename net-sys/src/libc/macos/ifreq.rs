@@ -76,18 +76,8 @@ impl IfReqAsPtr for libc::ifreq {
     }
 }
 
-pub(crate) trait PtrAsIfReq {
-    fn as_ifreq<'a>(&self) -> &'a mut libc::ifreq;
-}
-
-impl PtrAsIfReq for *mut c_void {
-    fn as_ifreq<'a>(&self) -> &'a mut libc::ifreq {
-        unsafe { self.cast::<libc::ifreq>().as_mut() }.unwrap()
-    }
-}
-
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::mem::size_of;
     use std::ptr;
 
@@ -98,7 +88,7 @@ mod tests {
     use crate::lladdr::LinkLevelAddress;
 
     use super::new;
-    use super::{IfReq, IfReqMut, PtrAsIfReq};
+    use super::{IfReq, IfReqMut};
 
     const IFREQ_SIZE: usize = 32;
     const NAME_SIZE: usize = 16;
@@ -109,6 +99,22 @@ mod tests {
     ];
     const LADDR_SIZE: usize = 6;
     const LLADDR: [u8; LADDR_SIZE] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+
+    pub(crate) trait PtrAsIfReq {
+        fn as_ifreq<'a>(&self) -> &'a mut libc::ifreq;
+    }
+
+    impl PtrAsIfReq for *mut c_void {
+        fn as_ifreq<'a>(&self) -> &'a mut libc::ifreq {
+            unsafe { self.cast::<libc::ifreq>().as_mut() }.unwrap()
+        }
+    }
+
+    impl PtrAsIfReq for *mut libc::ifreq {
+        fn as_ifreq<'a>(&self) -> &'a mut libc::ifreq {
+            unsafe { self.cast::<libc::ifreq>().as_mut() }.unwrap()
+        }
+    }
 
     pub(crate) trait IfReqBytes {
         fn as_bytes(&self) -> &[u8; size_of::<libc::ifreq>()];
