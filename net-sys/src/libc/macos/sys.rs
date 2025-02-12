@@ -51,13 +51,17 @@ pub(crate) fn strerror(errno: libc::c_int) -> String {
 mod tests {
     use libc::c_ulong;
 
+    use crate::Result;
+
     use super::{strerror, IFREQ_SIZE, SIOCGIFLLADDR, SIOCSIFLLADDR};
 
     #[test]
-    fn test_ifreq_size() {
-        let expected_size: c_ulong = std::mem::size_of::<libc::ifreq>().try_into().unwrap();
+    fn test_ifreq_size() -> Result<()> {
+        let expected_size: c_ulong = std::mem::size_of::<libc::ifreq>().try_into()?;
 
         assert_eq!(IFREQ_SIZE, expected_size);
+
+        Ok(())
     }
 
     #[test]
