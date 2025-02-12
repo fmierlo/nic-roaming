@@ -127,6 +127,8 @@ impl FromStr for LinkLevelAddress {
 mod tests {
     use std::collections::HashMap;
 
+    use crate::Result;
+
     use super::{FromStr, LinkLevelAddress, OctetsType};
 
     const LLADDR_SIZE: usize = 6;
@@ -249,13 +251,15 @@ mod tests {
     }
 
     #[test]
-    fn test_link_level_address_from_str() {
+    fn test_link_level_address_from_str() -> Result<()> {
         let source = "00:02:03:04:ee:FF";
         let expected = LinkLevelAddress([0x00, 0x02, 0x03, 0x04, 0xEE, 0xff]);
 
-        let addr = LinkLevelAddress::from_str(source).unwrap();
+        let addr = LinkLevelAddress::from_str(source)?;
 
         assert_eq!(addr, expected);
+
+        Ok(())
     }
 
     #[test]

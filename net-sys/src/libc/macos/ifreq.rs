@@ -86,6 +86,7 @@ pub(crate) mod tests {
     use crate::ifname::IfName;
     use crate::ifreq::{IfReqAsPtr, IfReqWith};
     use crate::lladdr::LinkLevelAddress;
+    use crate::Result;
 
     use super::new;
     use super::{IfReq, IfReqMut};
@@ -152,13 +153,16 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_ifreq_with_lladdr() {
+    fn test_ifreq_with_lladdr() -> Result<()> {
         let ifreq = new().with_lladdr(&LinkLevelAddress::from(&LLADDR));
 
         let sa_data_ptr = ptr::from_ref(unsafe { &ifreq.ifr_ifru.ifru_addr.sa_data });
-        let sa_data_ref = unsafe { sa_data_ptr.cast::<[u8; 6]>().as_ref() }.unwrap();
+        let sa_data_ref =
+            unsafe { sa_data_ptr.cast::<[u8; 6]>().as_ref() }.ok_or("sa_data_ptr cast error")?;
 
         assert_eq!(*sa_data_ref, LLADDR);
+
+        Ok(())
     }
 
     #[test]
@@ -171,15 +175,18 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_ifreq_change_lladdr() {
+    fn test_ifreq_change_lladdr() -> Result<()> {
         let mut ifreq = new();
 
         let sa_data_ptr = ptr::from_ref(unsafe { &ifreq.ifr_ifru.ifru_addr.sa_data });
-        let sa_data_ref = unsafe { sa_data_ptr.cast::<[u8; 6]>().as_ref() }.unwrap();
+        let sa_data_ref =
+            unsafe { sa_data_ptr.cast::<[u8; 6]>().as_ref() }.ok_or("sa_data_ptr cast error")?;
 
         ifreq.change_lladdr(&LinkLevelAddress::from(&LLADDR));
 
         assert_eq!(*sa_data_ref, LLADDR);
+
+        Ok(())
     }
 
     #[test]

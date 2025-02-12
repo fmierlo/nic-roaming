@@ -116,6 +116,8 @@ impl TryFrom<String> for IfName {
 mod tests {
     use std::collections::HashMap;
 
+    use crate::Result;
+
     use super::{IfName, IfNameType};
 
     const IF_NAME_SIZE: usize = 16;
@@ -244,13 +246,15 @@ mod tests {
     }
 
     #[test]
-    fn test_ifname_from_str() {
+    fn test_ifname_from_str() -> Result<()> {
         let source = "0123456789ABCDE";
         let expected = IfName(IF_NAME);
 
-        let ifname = IfName::try_from(source).unwrap();
+        let ifname = IfName::try_from(source)?;
 
         assert_eq!(ifname, expected);
+
+        Ok(())
     }
 
     #[test]
