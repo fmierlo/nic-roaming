@@ -46,6 +46,7 @@ impl IfReqMut for libc::ifreq {
                 lladdr.len(),
             );
         }
+        self.ifr_ifru.ifru_addr.sa_len = 6;
     }
 }
 
@@ -185,6 +186,7 @@ pub(crate) mod tests {
         ifreq.change_lladdr(&LinkLevelAddress::from(&LLADDR));
 
         assert_eq!(*sa_data_ref, LLADDR);
+        assert_eq!(unsafe { ifreq.ifr_ifru.ifru_addr.sa_len }, 6);
 
         Ok(())
     }
