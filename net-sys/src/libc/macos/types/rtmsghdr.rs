@@ -1,6 +1,6 @@
 use core::fmt::{Debug, Display};
 use std::ops::Deref;
-use std::ptr;
+use std::mem;
 
 use libc::c_int;
 
@@ -13,9 +13,7 @@ impl<'a> Deref for RtMsgHdr<'a> {
     type Target = libc::rt_msghdr;
 
     fn deref(&self) -> &Self::Target {
-        let ptr = self.0.as_ptr();
-        let target_ptr = ptr.cast::<Self::Target>();
-        unsafe { target_ptr.as_ref() }.unwrap()
+        unsafe { mem::transmute(self.0) }
     }
 }
 
@@ -26,9 +24,7 @@ impl<'a> RtMsgHdr<'a> {
 }
 
 fn as_bytes(rtm_rmx: &libc::rt_metrics) -> &[u8; size_of::<libc::rt_metrics>()] {
-    let ptr = ptr::from_ref(rtm_rmx);
-    let bytes_ptr = ptr.cast::<[u8; size_of::<libc::rt_metrics>()]>();
-    unsafe { bytes_ptr.as_ref() }.unwrap()
+    unsafe { mem::transmute(rtm_rmx) }
 }
 
 impl<'a> Display for RtMsgHdr<'a> {

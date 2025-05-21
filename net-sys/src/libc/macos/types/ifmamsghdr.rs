@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 use std::ops::Deref;
+use std::mem;
 
 use libc::{c_char, c_int};
 
@@ -12,9 +13,7 @@ impl<'a> Deref for IfMaMsgHdr<'a> {
     type Target = libc::ifma_msghdr;
 
     fn deref(&self) -> &Self::Target {
-        let ptr = self.0.as_ptr();
-        let target_ptr = ptr.cast::<Self::Target>();
-        unsafe { target_ptr.as_ref() }.unwrap()
+        unsafe { mem::transmute(self.0) }
     }
 }
 
@@ -49,9 +48,7 @@ impl<'a> IfMaMsgHdr<'a> {
 
     pub fn get_ifp(&self) -> Option<&libc::sockaddr_dl> {
         let buf = self.get_rta_buf(libc::RTA_IFP)?;
-        let ptr = buf.as_ptr();
-        let target_ptr = ptr.cast::<libc::sockaddr_dl>();
-        unsafe { target_ptr.as_ref() }
+        Some(unsafe { mem::transmute(buf.as_ptr()) })
     }
 }
 

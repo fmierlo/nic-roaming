@@ -9,6 +9,7 @@ use core::fmt::{Debug, Display};
 const OCTETS_SIZE: usize = 6;
 
 type OctetsType = [u8; OCTETS_SIZE];
+pub(crate) type SignedOctetsType = [i8; OCTETS_SIZE];
 
 #[derive(Clone, PartialEq, Eq)]
 enum Error {
@@ -48,6 +49,16 @@ pub type LLAddr = LinkLevelAddress;
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct LinkLevelAddress(OctetsType);
 
+impl LinkLevelAddress {
+    pub(crate) fn as_signed_ref(&self) -> &SignedOctetsType {
+        unsafe { mem::transmute(&self.0) }
+    }
+
+    pub(crate) fn as_signed_ptr(&self) -> *const i8 {
+        self.as_signed_ref().as_ptr()
+    }
+}
+
 impl Deref for LinkLevelAddress {
     type Target = OctetsType;
 
@@ -79,6 +90,13 @@ impl From<&LinkLevelAddress> for String {
 
 impl From<&OctetsType> for LinkLevelAddress {
     fn from(octets: &OctetsType) -> LinkLevelAddress {
+        LinkLevelAddress(*octets)
+    }
+}
+
+impl From<&SignedOctetsType> for LinkLevelAddress {
+    fn from(octets: &SignedOctetsType) -> LinkLevelAddress {
+        let octets: &OctetsType = unsafe { mem::transmute(octets) };
         LinkLevelAddress(*octets)
     }
 }
@@ -137,14 +155,12 @@ impl TryFrom<&[i8]> for LinkLevelAddress {
     type Error = Box<dyn std::error::Error>;
 
     fn try_from(value: &[i8]) -> Result<Self, Self::Error> {
-        let octets: &[u8] = unsafe { mem::transmute(value) };
-
-        if octets.len() != OCTETS_SIZE {
-            return Err(Error::WrongNumberOfOctets(as_hex_string(value), octets.len()).into());
+        if value.len() != OCTETS_SIZE {
+            return Err(Error::WrongNumberOfOctets(as_hex_string(value), value.len()).into());
         }
 
-        let mut lladdr: OctetsType = unsafe { std::mem::zeroed() };
-        lladdr.copy_from_slice(&octets);
+        let mut lladdr: SignedOctetsType = unsafe { std::mem::zeroed() };
+        lladdr.copy_from_slice(&value);
         Ok(Self::from(&lladdr))
     }
 }
@@ -155,10 +171,11 @@ mod tests {
 
     use crate::Result;
 
-    use super::{FromStr, LinkLevelAddress, OctetsType};
+    use super::{FromStr, LinkLevelAddress, OctetsType, SignedOctetsType};
 
-    const LLADDR_SIZE: usize = 6;
+    const OCTETS_SIZE: usize = 6;
     const OCTETS: OctetsType = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+    const SIGNED_OCTETS: SignedOctetsType = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
 
     #[test]
     fn test_link_level_address_len() {
@@ -166,7 +183,7 @@ mod tests {
 
         let len = addr.len();
 
-        assert_eq!(len, LLADDR_SIZE);
+        assert_eq!(len, OCTETS_SIZE);
     }
 
     #[test]
@@ -269,6 +286,16 @@ mod tests {
     #[test]
     fn test_link_level_address_from_octets() {
         let source = &OCTETS;
+        let expected = LinkLevelAddress(OCTETS);
+
+        let addr = LinkLevelAddress::from(source);
+
+        assert_eq!(addr, expected);
+    }
+
+    #[test]
+    fn test_link_level_address_from_signed_octets() {
+        let source = &SIGNED_OCTETS;
         let expected = LinkLevelAddress(OCTETS);
 
         let addr = LinkLevelAddress::from(source);
