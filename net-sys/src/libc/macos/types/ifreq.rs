@@ -85,12 +85,11 @@ pub(crate) mod tests {
     use libc::{c_char, c_void};
 
     use crate::ifname::IfName;
-    use crate::ifreq::{IfReqAsPtr, IfReqWith};
     use crate::lladdr::LinkLevelAddress;
     use crate::Result;
 
     use super::new;
-    use super::{IfReq, IfReqMut};
+    use super::{IfReq, IfReqAsPtr, IfReqMut, IfReqWith};
 
     const IFREQ_SIZE: usize = 32;
     const NAME_SIZE: usize = 16;

@@ -8,4 +8,4 @@ pub mod linux;
 pub mod macos;
 
 #[cfg(target_os = "macos")]
-pub use macos::{ifname, ifreq, nic};
+pub use macos::{ifname, nic};

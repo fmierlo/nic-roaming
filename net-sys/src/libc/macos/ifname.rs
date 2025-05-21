@@ -112,6 +112,27 @@ impl TryFrom<String> for IfName {
     }
 }
 
+fn as_string(value: &[libc::c_char]) -> String {
+    let c_str = unsafe { std::ffi::CStr::from_ptr(value.as_ptr()) };
+    c_str.to_bytes().escape_ascii().to_string()
+}
+
+impl TryFrom<&[libc::c_char]> for IfName {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_from(value: &[libc::c_char]) -> Result<Self, Self::Error> {
+        let value = match value.len() {
+            len if len < IF_NAME_MIN => return Err(Error::TooSmall(as_string(value)).into()),
+            len if len > IF_NAME_MAX => return Err(Error::TooLarge(as_string(value)).into()),
+            _ => value,
+        };
+
+        let mut ifname: IfNameType = unsafe { std::mem::zeroed() };
+        ifname[..value.len()].copy_from_slice(&value);
+        Ok(Self::from(&ifname))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

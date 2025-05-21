@@ -1,3 +1,5 @@
+use std::fmt::LowerHex;
+use std::mem;
 use std::ops::Deref;
 use std::result::Result;
 use std::str::FromStr;
@@ -115,6 +117,30 @@ impl FromStr for LinkLevelAddress {
 
         if octets.len() != OCTETS_SIZE {
             return Err(Error::WrongNumberOfOctets(value.to_string(), octets.len()).into());
+        }
+
+        let mut lladdr: OctetsType = unsafe { std::mem::zeroed() };
+        lladdr.copy_from_slice(&octets);
+        Ok(Self::from(&lladdr))
+    }
+}
+
+fn as_hex_string<T: LowerHex>(value: &[T]) -> String {
+    value
+        .iter()
+        .map(|octet| format!("{:02x}", octet))
+        .collect::<Vec<String>>()
+        .join(":")
+}
+
+impl TryFrom<&[i8]> for LinkLevelAddress {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_from(value: &[i8]) -> Result<Self, Self::Error> {
+        let octets: &[u8] = unsafe { mem::transmute(value) };
+
+        if octets.len() != OCTETS_SIZE {
+            return Err(Error::WrongNumberOfOctets(as_hex_string(value), octets.len()).into());
         }
 
         let mut lladdr: OctetsType = unsafe { std::mem::zeroed() };

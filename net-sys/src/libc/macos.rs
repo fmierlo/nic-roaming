@@ -1,7 +1,7 @@
 pub mod ifname;
-pub mod ifreq;
 pub mod nic;
 
-mod ioccom;
+mod defs;
 mod socket;
 mod sys;
+mod types;

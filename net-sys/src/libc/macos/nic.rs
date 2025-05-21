@@ -1,14 +1,91 @@
+use std::fmt::Debug;
+
 use crate::ifname::IfName;
-use crate::ifreq::IfReq;
 use crate::lladdr::LinkLevelAddress;
 use crate::Result;
 
-use super::ifreq::{self, IfReqWith};
+use super::defs::rtm::Rtm;
+use super::types::ifreq::{self, IfReq, IfReqWith};
+use super::types::rtbuf::{self, AsMsgHdr, RtBuf};
+use super::types::sockaddrdl::LinkEther;
+
 #[cfg(not(test))]
 use super::socket;
-
+use libc::c_ushort;
 #[cfg(test)]
 use mocks::socket;
+
+use super::socket::ReadResult::{EndOfRead, ReadLength};
+
+#[derive(Clone, Debug)]
+pub enum NicEvent {
+    NicNew((c_ushort, IfName, LinkLevelAddress)),
+    NicDel((c_ushort, IfName, LinkLevelAddress)),
+    NicNoop,
+}
+
+pub fn monitor() -> Result<NicMonitor> {
+    Ok(NicMonitor {
+        socket: socket::open_route_raw()?,
+    })
+}
+
+#[derive(Debug)]
+pub struct NicMonitor {
+    socket: socket::OpenSocket,
+}
+
+// Source: https://github.com/freebsd/freebsd-src/blob/main/sbin/route/route.c
+
+impl NicMonitor {
+    fn parse_msg(&self, rt_buf: &RtBuf, _len: isize) -> Option<NicEvent> {
+        let rtm = rt_buf.as_rt_msghdr();
+
+        if rtm.rtm_version as i32 != libc::RTM_VERSION {
+            eprintln!(
+                "routing message version {} is not understood",
+                rtm.rtm_version
+            );
+            return Some(NicEvent::NicNoop);
+        }
+
+        let event = match rtm.rtm_type() {
+            Rtm::RtmNewmaddr => {
+                let nic = rt_buf.as_ifma_msghdr().get_ifp()?.get_link_ether()?;
+                NicEvent::NicNew(nic)
+            }
+            Rtm::RtmDelmaddr => {
+                let nic = rt_buf.as_ifma_msghdr().get_ifp()?.get_link_ether()?;
+                NicEvent::NicDel(nic)
+            }
+            Rtm::RtmInvalid(value) => {
+                eprintln!("{:?}", Rtm::RtmInvalid(value));
+                NicEvent::NicNoop
+            }
+            _ => NicEvent::NicNoop,
+        };
+
+        Some(event)
+    }
+}
+
+impl Iterator for NicMonitor {
+    type Item = Result<NicEvent>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut rt_buf = rtbuf::new();
+        let event = match self.socket.read(&mut rt_buf) {
+            Ok(ReadLength(len)) => match self.parse_msg(&rt_buf, len) {
+                Some(event) => Ok(event),
+                None => Ok(NicEvent::NicNoop),
+            },
+            Ok(EndOfRead) => return None,
+            Err(err) => Err(err),
+        };
+
+        Some(event)
+    }
+}
 
 pub fn get_lladdr(ifname: &IfName) -> Result<LinkLevelAddress> {
     let mut ifreq = ifreq::new().with_name(ifname);
@@ -27,18 +104,27 @@ pub fn set_lladdr(ifname: &IfName, lladdr: &LinkLevelAddress) -> Result<()> {
 #[cfg(test)]
 pub(crate) mod mocks {
     pub(crate) mod socket {
+        use libc::c_char;
         use mockdown::{mockdown, Mock};
 
+        use crate::libc::macos::socket::ReadResult;
         use crate::Result;
 
         pub(crate) struct OpenLocalDgram(pub fn() -> Result<OpenSocket>);
+        pub(crate) struct OpenRouteRaw(pub fn() -> Result<OpenSocket>);
         pub(crate) struct GetLLAddr(pub fn(ifreq: &mut libc::ifreq) -> Result<()>);
         pub(crate) struct SetLLAddr(pub fn(ifreq: &mut libc::ifreq) -> Result<()>);
+        pub(crate) struct Read(pub fn(buf: &mut [c_char]) -> Result<ReadResult>);
 
         pub(crate) fn open_local_dgram() -> Result<OpenSocket> {
             mockdown().next(|OpenLocalDgram(mock)| mock())?
         }
 
+        pub(crate) fn open_route_raw() -> Result<OpenSocket> {
+            mockdown().next(|OpenRouteRaw(mock)| mock())?
+        }
+
+        #[derive(Debug)]
         pub(crate) struct OpenSocket();
 
         impl OpenSocket {
@@ -48,6 +134,9 @@ pub(crate) mod mocks {
 
             pub(crate) fn set_lladdr(&self, ifreq: &mut libc::ifreq) -> Result<()> {
                 mockdown().next(|SetLLAddr(mock)| mock(ifreq))?
+            }
+            pub(crate) fn read(&self, buf: &mut [c_char]) -> Result<ReadResult> {
+                mockdown().next(|Read(mock)| mock(buf))?
             }
         }
     }
@@ -60,10 +149,10 @@ mod tests {
     use mockdown::{mockdown, Mock};
 
     use crate::ifname::IfName;
-    use crate::ifreq::{IfReq, IfReqMut};
     use crate::lladdr::LinkLevelAddress;
     use crate::Result;
 
+    use super::super::types::ifreq::{IfReq, IfReqMut};
     use super::mocks::socket::{self, OpenSocket};
     use super::{get_lladdr, set_lladdr};
 

@@ -7,6 +7,6 @@ pub mod libc;
 pub mod lladdr;
 
 #[cfg(feature = "libc")]
-pub use libc::{ifname, ifreq, nic};
+pub use libc::{ifname, nic};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;

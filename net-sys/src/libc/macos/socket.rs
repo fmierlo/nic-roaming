@@ -1,28 +1,26 @@
 use std::fmt::{Debug, Display};
 
+use libc::{c_char, c_int, c_void, ssize_t};
+
 use crate::ifname::IfName;
 use crate::lladdr::LinkLevelAddress;
 use crate::Result;
 
-use super::ifreq::{IfReq, IfReqAsPtr};
+use super::defs::sio;
+use super::types::ifreq::{IfReq, IfReqAsPtr};
+
 #[cfg(not(test))]
 use super::sys;
-
 #[cfg(test)]
 use mocks::sys;
 
 #[derive(Clone, PartialEq, Eq)]
 enum Error {
-    OpenLocalDgram(libc::c_int, libc::c_int),
-    GetLinkLevelAddress(libc::c_int, IfName, libc::c_int, libc::c_int),
-    SetLinkLevelAddress(
-        libc::c_int,
-        IfName,
-        LinkLevelAddress,
-        libc::c_int,
-        libc::c_int,
-    ),
-    Close(libc::c_int, libc::c_int, libc::c_int),
+    OpenLocalDgram(c_int, c_int),
+    GetLinkLevelAddress(c_int, IfName, c_int, c_int),
+    SetLinkLevelAddress(c_int, IfName, LinkLevelAddress, c_int, c_int),
+    Read(c_int, ssize_t, c_int),
+    Close(c_int, c_int, c_int),
 }
 
 impl std::error::Error for Error {}
@@ -59,6 +57,13 @@ impl Debug for Error {
                 .field("errno", errno)
                 .field("strerror", &sys::strerror(*errno))
                 .finish(),
+            Error::Read(fd, ret, errno) => f
+                .debug_struct("Socket::Read")
+                .field("fd", fd)
+                .field("ret", ret)
+                .field("errno", errno)
+                .field("strerror", &sys::strerror(*errno))
+                .finish(),
             Error::Close(fd, ret, errno) => f
                 .debug_struct("Socket::CloseError")
                 .field("fd", fd)
@@ -71,7 +76,7 @@ impl Debug for Error {
 }
 
 pub(crate) fn open_local_dgram() -> Result<OpenSocket> {
-    match sys::socket(libc::AF_LOCAL, libc::SOCK_DGRAM, 0) {
+    match sys::socket(libc::PF_LOCAL, libc::SOCK_DGRAM, 0) {
         fd if fd >= 0 => Ok(OpenSocket { fd }),
         ret => {
             let errno = sys::errno();
@@ -80,15 +85,30 @@ pub(crate) fn open_local_dgram() -> Result<OpenSocket> {
     }
 }
 
+pub(crate) fn open_route_raw() -> Result<OpenSocket> {
+    match sys::socket(libc::PF_ROUTE, libc::SOCK_RAW, 0) {
+        fd if fd >= 0 => Ok(OpenSocket { fd }),
+        ret => {
+            let errno = sys::errno();
+            Err(Error::OpenLocalDgram(ret, errno).into())
+        }
+    }
+}
+
+pub enum ReadResult {
+    ReadLength(ssize_t),
+    EndOfRead,
+}
+
 #[derive(Debug)]
 pub(crate) struct OpenSocket {
-    fd: libc::c_int,
+    fd: c_int,
 }
 
 impl OpenSocket {
     pub(crate) fn get_lladdr(&self, ifreq: &mut libc::ifreq) -> Result<()> {
         let fd = self.fd;
-        match sys::ioctl(fd, sys::SIOCGIFLLADDR, ifreq.as_mut_ptr()) {
+        match sys::ioctl(fd, sio::SIOCGIFLLADDR, ifreq.as_mut_ptr()) {
             0 => Ok(()),
             ret => {
                 let ifname = ifreq.name();
@@ -100,7 +120,7 @@ impl OpenSocket {
 
     pub(crate) fn set_lladdr(&self, ifreq: &mut libc::ifreq) -> Result<()> {
         let fd = self.fd;
-        match sys::ioctl(fd, sys::SIOCSIFLLADDR, ifreq.as_mut_ptr()) {
+        match sys::ioctl(fd, sio::SIOCSIFLLADDR, ifreq.as_mut_ptr()) {
             0 => Ok(()),
             ret => {
                 let ifname = ifreq.name();
@@ -108,6 +128,18 @@ impl OpenSocket {
                 let errno = sys::errno();
                 Err(Error::SetLinkLevelAddress(fd, ifname, lladdr, ret, errno).into())
             }
+        }
+    }
+
+    pub(crate) fn read(&self, buf: &mut [c_char]) -> Result<ReadResult> {
+        let fd = self.fd;
+        match sys::read(fd, buf.as_mut_ptr() as *mut c_void, buf.len()) {
+            0 => Ok(ReadResult::EndOfRead),
+            ret if ret < 0 => {
+                let errno = sys::errno();
+                Err(Error::Read(fd, ret, errno).into())
+            }
+            ret => Ok(ReadResult::ReadLength(ret)),
         }
     }
 }
@@ -129,16 +161,17 @@ impl Drop for OpenSocket {
 #[cfg(test)]
 pub(crate) mod mocks {
     pub(crate) mod sys {
-        use libc::{c_int, c_ulong, c_void};
+        use libc::{c_int, c_ulong, c_void, size_t, ssize_t};
 
         use mockdown::{mockdown, Mock};
 
         use super::super::super::sys;
 
-        pub(crate) use sys::{strerror, SIOCGIFLLADDR, SIOCSIFLLADDR};
+        pub(crate) use sys::strerror;
 
         pub(crate) struct Socket(pub fn(domain: c_int, ty: c_int, protocol: c_int) -> c_int);
         pub(crate) struct Ioctl(pub fn(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int);
+        pub(crate) struct Read(pub fn(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t);
         pub(crate) struct Close(pub fn(fd: c_int) -> c_int);
         pub(crate) struct ErrNo(pub fn() -> c_int);
 
@@ -152,6 +185,10 @@ pub(crate) mod mocks {
             mockdown()
                 .next(|Ioctl(mock)| mock(fd, request, arg))
                 .unwrap()
+        }
+
+        pub(crate) fn read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t {
+            mockdown().next(|Read(mock)| mock(fd, buf, count)).unwrap()
         }
 
         pub(crate) fn close(fd: c_int) -> c_int {
@@ -172,11 +209,12 @@ mod tests {
     use mockdown::{mockdown, Mock};
 
     use crate::ifname::IfName;
-    use crate::ifreq::tests::PtrAsIfReq;
-    use crate::ifreq::{self, IfReq, IfReqMut, IfReqWith};
     use crate::lladdr::LinkLevelAddress;
     use crate::Result;
 
+    use super::super::defs::sio;
+    use super::super::types::ifreq::tests::PtrAsIfReq;
+    use super::super::types::ifreq::{self, IfReq, IfReqMut, IfReqWith};
     use super::{open_local_dgram, OpenSocket};
 
     use super::mocks::sys;
@@ -252,7 +290,7 @@ mod tests {
                 MOCK_FD
             }))
             .expect(sys::Ioctl(|fd, request, arg| {
-                assert_eq!((MOCK_FD, sys::SIOCGIFLLADDR), (fd, request));
+                assert_eq!((MOCK_FD, sio::SIOCGIFLLADDR), (fd, request));
                 assert_eq!(arg.as_ifreq().name(), *IFNAME);
                 arg.as_ifreq().change_lladdr(&LLADDR);
                 MOCK_SUCCESS
@@ -278,7 +316,7 @@ mod tests {
                 MOCK_FD
             }))
             .expect(sys::Ioctl(|fd, request, arg| {
-                assert_eq!((MOCK_FD, sys::SIOCGIFLLADDR), (fd, request));
+                assert_eq!((MOCK_FD, sio::SIOCGIFLLADDR), (fd, request));
                 assert_eq!(arg.as_ifreq().name(), *IFNAME);
                 MOCK_FAILURE
             }))
@@ -307,7 +345,7 @@ mod tests {
                 MOCK_FD
             }))
             .expect(sys::Ioctl(|fd, request, arg| {
-                assert_eq!((MOCK_FD, sys::SIOCSIFLLADDR), (fd, request));
+                assert_eq!((MOCK_FD, sio::SIOCSIFLLADDR), (fd, request));
                 assert_eq!(arg.as_ifreq().name(), *IFNAME);
                 assert_eq!(arg.as_ifreq().lladdr(), *LLADDR);
                 MOCK_SUCCESS
@@ -332,7 +370,7 @@ mod tests {
                 MOCK_FD
             }))
             .expect(sys::Ioctl(|fd, request, arg| {
-                assert_eq!((MOCK_FD, sys::SIOCSIFLLADDR), (fd, request));
+                assert_eq!((MOCK_FD, sio::SIOCSIFLLADDR), (fd, request));
                 assert_eq!(arg.as_ifreq().name(), *IFNAME);
                 assert_eq!(arg.as_ifreq().lladdr(), *LLADDR);
                 MOCK_FAILURE

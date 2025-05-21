@@ -1,10 +1,10 @@
-// /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/ioccom.h
+use libc::c_ulong;
+
+// https://github.com/apple/darwin-xnu/blob/xnu-7195.121.3/bsd/sys/ioccom.h#L70
 
 // Ioctl's have the command encoded in the lower word, and the size of
 // any in or out parameters in the upper word.  The high 3 bits of the
 // upper word are used to encode the in/out status of the parameter.
-
-use libc::c_ulong;
 
 // param char 'i' as c_ulong
 pub(crate) const I: c_ulong = 105;
