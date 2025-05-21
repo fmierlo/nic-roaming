@@ -83,6 +83,7 @@ pub(crate) mod tests {
 
     use libc::{c_char, c_void};
 
+    use crate::format::AsBytes;
     use crate::ifname::IfName;
     use crate::lladdr::{LinkLevelAddress, SignedOctetsType};
     use crate::Result;
@@ -116,16 +117,6 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) trait IfReqBytes {
-        fn as_bytes(&self) -> &[u8; size_of::<libc::ifreq>()];
-    }
-
-    impl IfReqBytes for libc::ifreq {
-        fn as_bytes(&self) -> &[u8; size_of::<libc::ifreq>()] {
-            unsafe { mem::transmute(self) }
-        }
-    }
-
     #[test]
     fn test_ifreq_size() {
         let expected_size = size_of::<libc::ifreq>();
@@ -139,7 +130,7 @@ pub(crate) mod tests {
 
         let ifreq = new();
 
-        assert_eq!(ifreq.as_bytes(), expected_ifreq.as_bytes());
+        assert_eq!(ifreq.as_lower_hex(), expected_ifreq.as_lower_hex());
     }
 
     #[test]
@@ -156,7 +147,7 @@ pub(crate) mod tests {
         let sa_data = unsafe { &ifreq.ifr_ifru.ifru_addr.sa_data };
         let sa_data_ref: &SignedOctetsType = unsafe { mem::transmute(sa_data) };
 
-        assert_eq!(*sa_data_ref, LLADDR);
+        assert_eq!((*sa_data_ref).as_lower_hex(), LLADDR.as_lower_hex());
 
         Ok(())
     }
@@ -179,7 +170,7 @@ pub(crate) mod tests {
 
         ifreq.change_lladdr(&LinkLevelAddress::from(&LLADDR));
 
-        assert_eq!(*sa_data_ref, LLADDR);
+        assert_eq!((*sa_data_ref).as_lower_hex(), LLADDR.as_lower_hex());
         assert_eq!(
             unsafe { ifreq.ifr_ifru.ifru_addr.sa_len },
             LLADDR_SIZE as u8
@@ -234,6 +225,6 @@ pub(crate) mod tests {
 
         let ifreq = ifreq_ptr.as_ifreq();
 
-        assert_eq!(ifreq.as_bytes(), expected_ifreq.as_bytes());
+        assert_eq!((*ifreq).as_lower_hex(), expected_ifreq.as_lower_hex());
     }
 }

@@ -10,3 +10,5 @@ pub mod lladdr;
 pub use libc::{ifname, nic};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+pub(crate) mod format;

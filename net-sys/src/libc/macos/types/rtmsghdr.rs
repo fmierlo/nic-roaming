@@ -4,6 +4,8 @@ use std::mem;
 
 use libc::c_int;
 
+use crate::format::AsBytes;
+
 use super::{rtbuf::RtBuf};
 use super::super::defs::rtm::Rtm;
 
@@ -21,10 +23,6 @@ impl<'a> RtMsgHdr<'a> {
     pub fn rtm_type(&self) -> Rtm {
         Rtm::from(self.rtm_type as c_int)
     }
-}
-
-fn as_bytes(rtm_rmx: &libc::rt_metrics) -> &[u8; size_of::<libc::rt_metrics>()] {
-    unsafe { mem::transmute(rtm_rmx) }
 }
 
 impl<'a> Display for RtMsgHdr<'a> {
@@ -51,7 +49,7 @@ impl<'a> Debug for RtMsgHdr<'a> {
             .field("rtm_errno", &self.rtm_errno)
             .field("rtm_use", &self.rtm_use)
             .field("rtm_inits", &self.rtm_inits)
-            .field("rtm_rmx", as_bytes(&self.rtm_rmx))
+            .field("rtm_rmx", &self.rtm_rmx.as_lower_hex())
             .finish()
     }
 }
