@@ -130,7 +130,7 @@ pub(crate) mod tests {
 
         let ifreq = new();
 
-        assert_eq!(ifreq.as_lower_hex(), expected_ifreq.as_lower_hex());
+        assert_eq!(ifreq.as_hex_colon(), expected_ifreq.as_hex_colon());
     }
 
     #[test]
@@ -147,7 +147,7 @@ pub(crate) mod tests {
         let sa_data = unsafe { &ifreq.ifr_ifru.ifru_addr.sa_data };
         let sa_data_ref: &SignedOctetsType = unsafe { mem::transmute(sa_data) };
 
-        assert_eq!((*sa_data_ref).as_lower_hex(), LLADDR.as_lower_hex());
+        assert_eq!((*sa_data_ref).as_hex_colon(), LLADDR.as_hex_colon());
 
         Ok(())
     }
@@ -170,7 +170,7 @@ pub(crate) mod tests {
 
         ifreq.change_lladdr(&LinkLevelAddress::from(&LLADDR));
 
-        assert_eq!((*sa_data_ref).as_lower_hex(), LLADDR.as_lower_hex());
+        assert_eq!((*sa_data_ref).as_hex_colon(), LLADDR.as_hex_colon());
         assert_eq!(
             unsafe { ifreq.ifr_ifru.ifru_addr.sa_len },
             LLADDR_SIZE as u8
@@ -225,6 +225,6 @@ pub(crate) mod tests {
 
         let ifreq = ifreq_ptr.as_ifreq();
 
-        assert_eq!((*ifreq).as_lower_hex(), expected_ifreq.as_lower_hex());
+        assert_eq!((*ifreq).as_hex_colon(), expected_ifreq.as_hex_colon());
     }
 }

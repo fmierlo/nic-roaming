@@ -49,7 +49,7 @@ impl<'a> Debug for RtMsgHdr<'a> {
             .field("rtm_errno", &self.rtm_errno)
             .field("rtm_use", &self.rtm_use)
             .field("rtm_inits", &self.rtm_inits)
-            .field("rtm_rmx", &self.rtm_rmx.as_lower_hex())
+            .field("rtm_rmx", &self.rtm_rmx.as_hex_colon())
             .finish()
     }
 }

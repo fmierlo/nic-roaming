@@ -1,10 +1,11 @@
-use std::fmt::LowerHex;
 use std::mem;
 use std::ops::Deref;
 use std::result::Result;
 use std::str::FromStr;
 
 use core::fmt::{Debug, Display};
+
+use crate::format::AsBytes;
 
 const OCTETS_SIZE: usize = 6;
 
@@ -143,20 +144,14 @@ impl FromStr for LinkLevelAddress {
     }
 }
 
-fn as_hex_string<T: LowerHex>(value: &[T]) -> String {
-    value
-        .iter()
-        .map(|octet| format!("{:02x}", octet))
-        .collect::<Vec<String>>()
-        .join(":")
-}
-
 impl TryFrom<&[i8]> for LinkLevelAddress {
     type Error = Box<dyn std::error::Error>;
 
     fn try_from(value: &[i8]) -> Result<Self, Self::Error> {
         if value.len() != OCTETS_SIZE {
-            return Err(Error::WrongNumberOfOctets(as_hex_string(value), value.len()).into());
+            return Err(
+                Error::WrongNumberOfOctets(value.as_hex_colon().into(), value.len()).into(),
+            );
         }
 
         let mut lladdr: SignedOctetsType = unsafe { std::mem::zeroed() };
