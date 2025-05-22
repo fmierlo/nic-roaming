@@ -1,14 +1,18 @@
+use core::fmt::{Debug, Display};
 use std::ffi::CString;
+use std::mem;
 use std::ops::Deref;
 use std::ptr;
 
-use core::fmt::{Debug, Display};
+use crate::format::{AsBytes, AsString};
 
-const IF_NAME_SIZE: libc::size_t = libc::IFNAMSIZ;
-const IF_NAME_MIN: libc::size_t = 3;
-const IF_NAME_MAX: libc::size_t = IF_NAME_SIZE - 1;
+pub use crate::IF_NAME_SIZE;
 
-type IfNameType = [libc::c_char; IF_NAME_SIZE];
+const IF_NAME_MIN: usize = 3;
+const IF_NAME_MAX: usize = IF_NAME_SIZE - 1;
+
+type IfNameType = [u8; IF_NAME_SIZE];
+type SignedIfNameType = [i8; IF_NAME_SIZE];
 
 #[derive(Clone, PartialEq, Eq)]
 enum Error {
@@ -52,6 +56,16 @@ impl Debug for Error {
 #[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct IfName(IfNameType);
 
+impl IfName {
+    pub(crate) fn as_signed_ref(&self) -> &SignedIfNameType {
+        unsafe { mem::transmute(&self.0) }
+    }
+
+    pub(crate) fn as_signed_ptr(&self) -> *const i8 {
+        self.as_signed_ref().as_bytes_ptr()
+    }
+}
+
 impl Deref for IfName {
     type Target = IfNameType;
 
@@ -62,25 +76,25 @@ impl Deref for IfName {
 
 impl Debug for IfName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", String::from(self))
+        write!(f, "{:?}", self.as_string())
     }
 }
 
 impl Display for IfName {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", String::from(self))
-    }
-}
-
-impl From<&IfName> for String {
-    fn from(value: &IfName) -> Self {
-        let c_str = unsafe { std::ffi::CStr::from_ptr(value.as_ptr()) };
-        c_str.to_bytes().escape_ascii().to_string()
+        write!(fmt, "{}", self.as_string())
     }
 }
 
 impl From<&IfNameType> for IfName {
     fn from(value: &IfNameType) -> Self {
+        Self(*value)
+    }
+}
+
+impl From<&SignedIfNameType> for IfName {
+    fn from(value: &SignedIfNameType) -> IfName {
+        let value: &IfNameType = unsafe { mem::transmute(value) };
         Self(*value)
     }
 }
@@ -104,7 +118,7 @@ impl TryFrom<String> for IfName {
                 .map_err(|error| Error::InvalidCString(value, error.to_string()))?,
         };
 
-        let mut ifname: IfNameType = unsafe { std::mem::zeroed() };
+        let mut ifname: SignedIfNameType = unsafe { std::mem::zeroed() };
         unsafe {
             ptr::copy_nonoverlapping(value.as_ptr(), ifname.as_mut_ptr(), value.as_bytes().len());
         }
@@ -112,22 +126,17 @@ impl TryFrom<String> for IfName {
     }
 }
 
-fn as_string(value: &[libc::c_char]) -> String {
-    let c_str = unsafe { std::ffi::CStr::from_ptr(value.as_ptr()) };
-    c_str.to_bytes().escape_ascii().to_string()
-}
-
-impl TryFrom<&[libc::c_char]> for IfName {
+impl TryFrom<&[i8]> for IfName {
     type Error = Box<dyn std::error::Error>;
 
-    fn try_from(value: &[libc::c_char]) -> Result<Self, Self::Error> {
+    fn try_from(value: &[i8]) -> Result<Self, Self::Error> {
         let value = match value.len() {
-            len if len < IF_NAME_MIN => return Err(Error::TooSmall(as_string(value)).into()),
-            len if len > IF_NAME_MAX => return Err(Error::TooLarge(as_string(value)).into()),
+            len if len < IF_NAME_MIN => return Err(Error::TooSmall(value.as_string()).into()),
+            len if len > IF_NAME_MAX => return Err(Error::TooLarge(value.as_string()).into()),
             _ => value,
         };
 
-        let mut ifname: IfNameType = unsafe { std::mem::zeroed() };
+        let mut ifname: SignedIfNameType = unsafe { std::mem::zeroed() };
         ifname[..value.len()].copy_from_slice(&value);
         Ok(Self::from(&ifname))
     }

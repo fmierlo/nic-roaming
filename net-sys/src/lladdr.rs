@@ -1,11 +1,10 @@
+use core::fmt::{Debug, Display};
 use std::mem;
 use std::ops::Deref;
 use std::result::Result;
 use std::str::FromStr;
 
-use core::fmt::{Debug, Display};
-
-use crate::format::AsBytes;
+use crate::format::{AsBytes, AsHexColon};
 
 const OCTETS_SIZE: usize = 6;
 
@@ -56,7 +55,7 @@ impl LinkLevelAddress {
     }
 
     pub(crate) fn as_signed_ptr(&self) -> *const i8 {
-        self.as_signed_ref().as_ptr()
+        self.as_signed_ref().as_bytes_ptr()
     }
 }
 
@@ -70,35 +69,25 @@ impl Deref for LinkLevelAddress {
 
 impl Debug for LinkLevelAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", String::from(self))
+        write!(f, "{:?}", self.as_hex_colon())
     }
 }
 
 impl Display for LinkLevelAddress {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(fmt, "{}", String::from(self))
+        write!(fmt, "{}", self.as_hex_colon())
     }
 }
-
-impl From<&LinkLevelAddress> for String {
-    fn from(value: &LinkLevelAddress) -> Self {
-        format!(
-            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            value[0], value[1], value[2], value[3], value[4], value[5]
-        )
-    }
-}
-
 impl From<&OctetsType> for LinkLevelAddress {
-    fn from(octets: &OctetsType) -> LinkLevelAddress {
-        LinkLevelAddress(*octets)
+    fn from(octets: &OctetsType) -> Self {
+        Self(*octets)
     }
 }
 
 impl From<&SignedOctetsType> for LinkLevelAddress {
-    fn from(octets: &SignedOctetsType) -> LinkLevelAddress {
+    fn from(octets: &SignedOctetsType) -> Self {
         let octets: &OctetsType = unsafe { mem::transmute(octets) };
-        LinkLevelAddress(*octets)
+        Self(*octets)
     }
 }
 

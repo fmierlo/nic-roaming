@@ -1,4 +1,3 @@
-pub mod ifname;
 pub mod nic;
 
 mod defs;

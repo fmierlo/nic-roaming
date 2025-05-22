@@ -1,14 +1,14 @@
 #[cfg(not(any(feature = "libc")))]
 compile_error!("Unsupported system!");
 
-#[cfg(feature = "libc")]
-pub mod libc;
-
+pub(crate) mod format;
+pub mod ifname;
 pub mod lladdr;
 
 #[cfg(feature = "libc")]
-pub use libc::{ifname, nic};
+mod libc;
+
+#[cfg(feature = "libc")]
+pub use libc::{nic, IF_NAME_SIZE};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-pub(crate) mod format;

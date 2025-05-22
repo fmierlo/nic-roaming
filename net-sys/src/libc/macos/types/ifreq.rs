@@ -34,7 +34,7 @@ pub(crate) trait IfReqMut {
 impl IfReqMut for libc::ifreq {
     fn change_name(&mut self, ifname: &IfName) {
         unsafe {
-            ptr::copy_nonoverlapping(ifname.as_ptr(), self.ifr_name.as_mut_ptr(), ifname.len());
+            ptr::copy_nonoverlapping(ifname.as_signed_ptr(), self.ifr_name.as_mut_ptr(), ifname.len());
         }
     }
 
@@ -83,7 +83,7 @@ pub(crate) mod tests {
 
     use libc::{c_char, c_void};
 
-    use crate::format::AsBytes;
+    use crate::format::{AsBytes, AsHexColon};
     use crate::ifname::IfName;
     use crate::lladdr::{LinkLevelAddress, SignedOctetsType};
     use crate::Result;
@@ -184,12 +184,12 @@ pub(crate) mod tests {
         let mut ifreq = new();
 
         unsafe {
-            std::ptr::copy_nonoverlapping(NAME.as_ptr(), ifreq.ifr_name.as_mut_ptr(), NAME.len());
+            std::ptr::copy_nonoverlapping(NAME.as_bytes_ptr(), ifreq.ifr_name.as_mut_ptr(), NAME.len());
         }
 
         let ifname = ifreq.name();
 
-        assert_eq!(*ifname, NAME);
+        assert_eq!(*ifname.as_signed_ref(), NAME);
     }
 
     #[test]
@@ -197,7 +197,7 @@ pub(crate) mod tests {
         let mut ifreq = new();
         unsafe {
             std::ptr::copy_nonoverlapping(
-                LLADDR.as_ptr(),
+                LLADDR.as_bytes_ptr(),
                 ifreq.ifr_ifru.ifru_addr.sa_data.as_mut_ptr(),
                 LLADDR.len(),
             );

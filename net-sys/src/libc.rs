@@ -8,4 +8,6 @@ pub mod linux;
 pub mod macos;
 
 #[cfg(target_os = "macos")]
-pub use macos::{ifname, nic};
+pub use macos::nic;
+
+pub const IF_NAME_SIZE: usize = libc::IFNAMSIZ;

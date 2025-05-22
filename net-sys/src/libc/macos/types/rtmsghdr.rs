@@ -1,13 +1,13 @@
 use core::fmt::{Debug, Display};
-use std::ops::Deref;
 use std::mem;
+use std::ops::Deref;
 
 use libc::c_int;
 
-use crate::format::AsBytes;
+use crate::format::AsHexColon;
 
-use super::{rtbuf::RtBuf};
 use super::super::defs::rtm::Rtm;
+use super::rtbuf::RtBuf;
 
 pub(crate) struct RtMsgHdr<'a>(pub(crate) &'a RtBuf);
 
